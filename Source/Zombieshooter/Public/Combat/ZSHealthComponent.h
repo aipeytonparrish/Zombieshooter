@@ -26,6 +26,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ZS|Health", meta = (ClampMin = "0"))
 	float MaxArmor = 0.f;
 
+	/** Armor at spawn. Negative = start full. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ZS|Health")
+	float StartingArmor = -1.f;
+
 	/** Fraction of damage armor soaks up while it has points left. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ZS|Health", meta = (ClampMin = "0", ClampMax = "1"))
 	float ArmorAbsorption = 0.6f;
@@ -61,6 +65,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "ZS|Health")
 	void AddArmor(float Amount);
+
+	/** Restore health (not above max). Returns the amount actually healed. */
+	UFUNCTION(BlueprintCallable, Category = "ZS|Health")
+	float Heal(float Amount);
 
 	/** Find the health component on an actor (nullptr if it has none). */
 	static UZSHealthComponent* FindOn(const AActor* Actor);

@@ -11,6 +11,10 @@
 #include "Engine/World.h"
 #include "Zombies/ZSZombieBase.h"
 #include "EngineUtils.h"
+#include "Kismet/GameplayStatics.h"
+#include "GameFramework/DamageType.h"
+#include "Rounds/ZSGameMode_Survival.h"
+#include "Rounds/ZSRoundManagerComponent.h"
 #include "Zombieshooter.h"
 
 AZSPlayerController::AZSPlayerController()
@@ -182,6 +186,30 @@ void AZSPlayerController::StartAutoShotIfRequested()
 	FParse::Value(Cmd, TEXT("ZSAutoZombieType="), AutoZombieType);
 	const bool bGod = FParse::Param(Cmd, TEXT("ZSAutoGod"));
 	const bool bBursts = FParse::Param(Cmd, TEXT("ZSAutoBursts"));
+	if (FParse::Param(Cmd, TEXT("ZSAutoKillAll")))
+	{
+		FTimerHandle KillTimer;
+		GetWorldTimerManager().SetTimer(KillTimer, FTimerDelegate::CreateWeakLambda(this, [this]() { ZSKillZombies(); }), 2.f, true, 2.f);
+	}
+	FString TeleportStr;
+	if (FParse::Value(Cmd, TEXT("ZSAutoTeleport="), TeleportStr, false))
+	{
+		TArray<FString> Parts;
+		TeleportStr.ParseIntoArray(Parts, TEXT(","));
+		if (Parts.Num() == 3)
+		{
+			const FVector Where(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]), FCString::Atof(*Parts[2]));
+			FTimerHandle TeleportTimer;
+			GetWorldTimerManager().SetTimer(TeleportTimer, FTimerDelegate::CreateWeakLambda(this, [this, Where]() { if (APawn* P = GetPawn()) { const bool bOk = P->TeleportTo(Where, P->GetActorRotation()); UE_LOG(LogZS, Warning, TEXT("Teleport %s -> %s"), bOk ? TEXT("ok") : TEXT("FAILED"), *P->GetActorLocation().ToCompactString()); } }), 0.7f, false);
+		}
+	}
+	int32 AutoRound = 0;
+	FParse::Value(Cmd, TEXT("ZSAutoRound="), AutoRound);
+	if (AutoRound > 0)
+	{
+		FTimerHandle RoundTimer;
+		GetWorldTimerManager().SetTimer(RoundTimer, FTimerDelegate::CreateWeakLambda(this, [this, AutoRound]() { ZSRound(AutoRound); }), 0.6f, false);
+	}
 
 	FTimerHandle Setup;
 	GetWorldTimerManager().SetTimer(Setup, FTimerDelegate::CreateWeakLambda(this, [this, bRange, bADS, bFire, WeaponSlot, Pitch, Yaw, AutoZombies, AutoZombieType, bGod]()
@@ -232,6 +260,7 @@ void AZSPlayerController::StartAutoShotIfRequested()
 	FTimerHandle Shot;
 	GetWorldTimerManager().SetTimer(Shot, FTimerDelegate::CreateWeakLambda(this, [this]()
 	{
+		ZSZombieInfo();
 		ConsoleCommand(TEXT("HighResShot 1"));
 	}), FMath::Max(Delay, 1.f), false);
 
@@ -282,7 +311,10 @@ void AZSPlayerController::ZSKillZombies()
 {
 	for (TActorIterator<AZSZombieBase> It(GetWorld()); It; ++It)
 	{
-		It->Destroy();
+		if (!It->IsDead())
+		{
+			UGameplayStatics::ApplyDamage(*It, 1.0e6f, nullptr, nullptr, UDamageType::StaticClass());
+		}
 	}
 }
 
@@ -293,4 +325,31 @@ void AZSPlayerController::ZSGod()
 		P->SetCanBeDamaged(!P->CanBeDamaged());
 		UE_LOG(LogZS, Log, TEXT("God mode %s"), P->CanBeDamaged() ? TEXT("off") : TEXT("on"));
 	}
+}
+
+void AZSPlayerController::ZSRound(int32 Round)
+{
+	if (AZSGameMode_Survival* GM = GetWorld()->GetAuthGameMode<AZSGameMode_Survival>())
+	{
+		GM->GetRoundManager()->SkipToRound(Round);
+	}
+	else
+	{
+		UE_LOG(LogZS, Warning, TEXT("ZSRound only works in survival mode (?game=Survival or the L_ZSTest map)."));
+	}
+}
+
+void AZSPlayerController::ZSZombieInfo()
+{
+	const APawn* P = GetPawn();
+	int32 N = 0;
+	for (TActorIterator<AZSZombieBase> It(GetWorld()); It; ++It)
+	{
+		const AZSZombieBase* Z = *It;
+		UE_LOG(LogZS, Warning, TEXT("Zombie %s: dist %.0f state %d speed %.0f %s at %s"), *Z->GetName(),
+			P ? FVector::Dist(P->GetActorLocation(), Z->GetActorLocation()) : -1.f, (int32)Z->GetZombieState(),
+			Z->GetVelocity().Size2D(), Z->IsDirectChasing() ? TEXT("DIRECT") : TEXT("NAV"), *Z->GetActorLocation().ToCompactString());
+		++N;
+	}
+	UE_LOG(LogZS, Warning, TEXT("%d zombies"), N);
 }

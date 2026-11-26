@@ -4,6 +4,10 @@
 #include "Player/ZSPlayerCharacter.h"
 #include "Core/ZSGameUserSettings.h"
 #include "Combat/ZSHealthComponent.h"
+#include "Rounds/ZSGameState_Survival.h"
+#include "Interaction/ZSInteractionComponent.h"
+#include "CommonInputSubsystem.h"
+#include "Engine/LocalPlayer.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
@@ -39,9 +43,16 @@ void AZSHUD::DrawHUD()
 	const AZSPlayerCharacter* Char = Cast<AZSPlayerCharacter>(GetOwningPawn());
 	// Everything is authored for 1080p and scaled to the actual resolution.
 	const float Scale = Canvas->ClipY / 1080.f;
+	const AZSGameState_Survival* GS = GetWorld()->GetGameState<AZSGameState_Survival>();
 	if (Char)
 	{
 		DrawHealth(Char, Scale);
+		DrawInteractPrompt(Char, Scale);
+	}
+	DrawToasts(Scale);
+	if (GS)
+	{
+		DrawSurvival(GS, Char, Scale);
 	}
 	UZSWeaponComponent* Weapons = Char ? Char->GetWeaponComponent() : nullptr;
 	if (!Weapons || !Weapons->GetCurrentWeapon() || (Char->GetHealthComponent() && Char->GetHealthComponent()->IsDead()))
@@ -244,7 +255,25 @@ void AZSHUD::DrawHealth(const AZSPlayerCharacter* Char, float Scale)
 	UFont* Small = GEngine->GetMediumFont();
 	DrawText(FString::Printf(TEXT("%d"), FMath::CeilToInt(Health->GetHealth())), HudWhite, X, Y - 26.f * Scale, Small, 1.3f * Scale);
 
-	if (Health->IsDead())
+	// Armor plates: one segment per 50 points, above the health bar.
+	if (Health->MaxArmor > 0.f)
+	{
+		const int32 Plates = FMath::Max(1, FMath::RoundToInt(Health->MaxArmor / 50.f));
+		const float Gap = 6.f * Scale;
+		const float SegW = (W * 0.6f - Gap * (Plates - 1)) / Plates;
+		const float SegH = 7.f * Scale;
+		const float SegY = Y - 40.f * Scale;
+		const float SegX0 = X + 60.f * Scale;
+		for (int32 i = 0; i < Plates; ++i)
+		{
+			const float Fill = FMath::Clamp((Health->GetArmor() - i * 50.f) / 50.f, 0.f, 1.f);
+			const float SX = SegX0 + i * (SegW + Gap);
+			DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.5f), SX - 1.f, SegY - 1.f, SegW + 2.f, SegH + 2.f);
+			DrawRect(FLinearColor(0.25f, 0.6f, 1.f, 0.95f), SX, SegY, SegW * Fill, SegH);
+		}
+	}
+
+	if (Health->IsDead() && !GetWorld()->GetGameState<AZSGameState_Survival>())
 	{
 		DrawRect(FLinearColor(0.15f, 0.f, 0.f, 0.45f), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
 		const FString Text = TEXT("YOU WERE KILLED");
@@ -252,5 +281,134 @@ void AZSHUD::DrawHealth(const AZSPlayerCharacter* Char, float Scale)
 		UFont* Big = GEngine->GetLargeFont();
 		GetTextSize(Text, TW, TH, Big, 4.f * Scale);
 		DrawText(Text, KillRed, Canvas->ClipX * 0.5f - TW * 0.5f, Canvas->ClipY * 0.38f, Big, 4.f * Scale);
+	}
+}
+
+// ---- Survival / interaction / toasts ---------------------------------------------------------
+
+void AZSHUD::Toast(const APawn* Player, const FText& Message)
+{
+	if (const APlayerController* PC = Player ? Cast<APlayerController>(Player->GetController()) : nullptr)
+	{
+		if (AZSHUD* HUD = Cast<AZSHUD>(PC->GetHUD()))
+		{
+			HUD->AddToast(Message);
+		}
+	}
+}
+
+void AZSHUD::AddToast(const FText& Message)
+{
+	FToast& T = Toasts.AddDefaulted_GetRef();
+	T.Text = Message;
+	T.Time = GetWorld()->GetTimeSeconds();
+	if (Toasts.Num() > 3)
+	{
+		Toasts.RemoveAt(0);
+	}
+}
+
+void AZSHUD::DrawCentered(const FString& Text, float Y, UFont* Font, float TextScale, const FLinearColor& Color)
+{
+	float TW, TH;
+	GetTextSize(Text, TW, TH, Font, TextScale);
+	const float X = Canvas->ClipX * 0.5f - TW * 0.5f;
+	DrawText(Text, HudShadow * FLinearColor(1, 1, 1, Color.A), X + 2.f, Y + 2.f, Font, TextScale);
+	DrawText(Text, Color, X, Y, Font, TextScale);
+}
+
+void AZSHUD::DrawToasts(float Scale)
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	Toasts.RemoveAll([Now](const FToast& T) { return Now - T.Time > 1.8f; });
+	UFont* Font = GEngine->GetMediumFont();
+	float Y = Canvas->ClipY * 0.72f;
+	for (int32 i = Toasts.Num() - 1; i >= 0; --i)
+	{
+		const float Age = Now - Toasts[i].Time;
+		FLinearColor C = HudWhite;
+		C.A = FMath::Clamp((1.8f - Age) / 0.5f, 0.f, 1.f);
+		DrawCentered(Toasts[i].Text.ToString(), Y, Font, 1.4f * Scale, C);
+		Y -= 30.f * Scale;
+	}
+}
+
+void AZSHUD::DrawInteractPrompt(const AZSPlayerCharacter* Char, float Scale)
+{
+	const UZSInteractionComponent* Interaction = Char->GetInteraction();
+	if (!Interaction || !Interaction->GetFocused())
+	{
+		return;
+	}
+	bool bGamepad = false;
+	if (const APlayerController* PC = GetOwningPlayerController())
+	{
+		if (const UCommonInputSubsystem* Input = PC->GetLocalPlayer() ? PC->GetLocalPlayer()->GetSubsystem<UCommonInputSubsystem>() : nullptr)
+		{
+			bGamepad = Input->GetCurrentInputType() == ECommonInputType::Gamepad;
+		}
+	}
+	const FString Text = FString::Printf(TEXT("[%s]  %s"), bGamepad ? TEXT("X") : TEXT("E"), *Interaction->GetPrompt().ToString());
+	DrawCentered(Text, Canvas->ClipY * 0.58f, GEngine->GetMediumFont(), 1.5f * Scale, HeadGold);
+}
+
+void AZSHUD::DrawSurvival(const AZSGameState_Survival* GS, const AZSPlayerCharacter* Char, float Scale)
+{
+	UFont* Big = GEngine->GetLargeFont();
+	UFont* Small = GEngine->GetMediumFont();
+	const float Now = GetWorld()->GetTimeSeconds();
+	const FLinearColor RoundRed(0.75f, 0.06f, 0.04f, 0.95f);
+
+	// Top-left: round number, zombies left, kills.
+	if (GS->Round > 0)
+	{
+		const FString RoundText = FString::Printf(TEXT("%d"), GS->Round);
+		DrawText(RoundText, HudShadow, 73.f * Scale, 33.f * Scale, Big, 6.5f * Scale);
+		DrawText(RoundText, RoundRed, 70.f * Scale, 30.f * Scale, Big, 6.5f * Scale);
+		if (GS->Phase == EZSRoundPhase::Active)
+		{
+			DrawText(FString::Printf(TEXT("ZOMBIES  %d"), GS->ZombiesRemaining), HudWhite, 72.f * Scale, 140.f * Scale, Small, 1.3f * Scale);
+		}
+		DrawText(FString::Printf(TEXT("KILLS  %d"), GS->Kills), FLinearColor(0.8f, 0.8f, 0.8f, 0.8f), 72.f * Scale, 168.f * Scale, Small, 1.15f * Scale);
+	}
+
+	const float CY = Canvas->ClipY * 0.26f;
+	switch (GS->Phase)
+	{
+	case EZSRoundPhase::PreGame:
+		DrawCentered(TEXT("GET READY"), CY, Big, 2.2f * Scale, HudWhite);
+		DrawCentered(FString::Printf(TEXT("%d"), FMath::CeilToInt(GS->PhaseTimeLeft)), CY + 60.f * Scale, Big, 1.6f * Scale, HeadGold);
+		break;
+
+	case EZSRoundPhase::Active:
+	{
+		const float Age = Now - GS->RoundStartTime;
+		if (Age < 3.5f)
+		{
+			FLinearColor C = RoundRed;
+			C.A = FMath::Clamp(3.5f - Age, 0.f, 1.f);
+			DrawCentered(FString::Printf(TEXT("ROUND %d"), GS->Round), CY, Big, 3.f * Scale, C);
+		}
+		break;
+	}
+
+	case EZSRoundPhase::Break:
+		DrawCentered(FString::Printf(TEXT("ROUND %d SURVIVED"), GS->Round), CY, Big, 2.2f * Scale, HudWhite);
+		DrawCentered(FString::Printf(TEXT("NEXT ROUND IN %d"), FMath::CeilToInt(GS->PhaseTimeLeft)), CY + 60.f * Scale, Small, 1.5f * Scale, HeadGold);
+		break;
+
+	case EZSRoundPhase::GameOver:
+	{
+		DrawRect(FLinearColor(0.08f, 0.f, 0.f, 0.6f), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
+		const int32 Minutes = FMath::FloorToInt(GS->RunTime / 60.f);
+		const int32 Seconds = FMath::FloorToInt(GS->RunTime) % 60;
+		const float Y0 = Canvas->ClipY * 0.3f;
+		DrawCentered(TEXT("GAME OVER"), Y0, Big, 4.f * Scale, KillRed);
+		DrawCentered(FString::Printf(TEXT("You reached round %d"), GS->Round), Y0 + 110.f * Scale, Small, 1.8f * Scale, HudWhite);
+		DrawCentered(FString::Printf(TEXT("Kills %d    Headshots %d    Time %d:%02d"), GS->Kills, GS->Headshots, Minutes, Seconds),
+			Y0 + 160.f * Scale, Small, 1.4f * Scale, FLinearColor(0.85f, 0.85f, 0.85f, 1.f));
+		DrawCentered(FString::Printf(TEXT("Restarting in %d"), FMath::CeilToInt(GS->RestartIn)), Y0 + 220.f * Scale, Small, 1.2f * Scale, HeadGold);
+		break;
+	}
 	}
 }

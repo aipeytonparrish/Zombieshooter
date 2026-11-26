@@ -53,6 +53,9 @@ private:
 
 	void Rebuild();
 
+	/** Spawn points + ammo crates for survival when the level has none (quick-test map). */
+	void SpawnSurvivalProps();
+
 	/** Axis-aligned box from min corner to max corner (local space, cm). */
 	void AddBox(const FVector& Min, const FVector& Max);
 

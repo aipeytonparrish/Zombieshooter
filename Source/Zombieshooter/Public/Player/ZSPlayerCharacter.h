@@ -9,6 +9,7 @@ class UZSMovementComponent;
 class UZSFirstPersonArmsComponent;
 class UZSWeaponComponent;
 class UZSHealthComponent;
+class UZSInteractionComponent;
 struct FInputActionValue;
 
 /**
@@ -43,6 +44,8 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "ZS|Player")
 	UZSHealthComponent* GetHealthComponent() const { return HealthComponent; }
+
+	UZSInteractionComponent* GetInteraction() const { return Interaction; }
 
 	/** World time the player last took damage (HUD damage flash). */
 	float GetLastDamageTime() const { return LastDamageTime; }
@@ -80,6 +83,9 @@ protected:
 	/** Health + regen. Armor arrives in Milestone 5. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "ZS|Player")
 	TObjectPtr<UZSHealthComponent> HealthComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "ZS|Player")
+	TObjectPtr<UZSInteractionComponent> Interaction;
 
 	/** Sandbox only: seconds before respawning after death (the round system replaces this with game over). */
 	UPROPERTY(EditDefaultsOnly, Category = "ZS|Player")
@@ -136,6 +142,7 @@ private:
 	void Input_Reload(const FInputActionValue& Value);
 	void Input_SwitchWeapon(const FInputActionValue& Value);
 	void Input_FireMode(const FInputActionValue& Value);
+	void Input_Interact(const FInputActionValue& Value);
 
 	void StartSprint(bool bToggleMode);
 	void StopSprint(bool bToggleMode);

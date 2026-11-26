@@ -86,6 +86,14 @@ public:
 	UFUNCTION(Exec)
 	void ZSKillZombies();
 
+	/** ZSRound 10 -> survival mode: jump to round N. */
+	UFUNCTION(Exec)
+	void ZSRound(int32 Round);
+
+	/** ZSZombieInfo -> logs every zombie: distance, state, speed, nav path or direct steering. */
+	UFUNCTION(Exec)
+	void ZSZombieInfo();
+
 	/** ZSGod -> toggles player invulnerability (testing). */
 	UFUNCTION(Exec)
 	void ZSGod();

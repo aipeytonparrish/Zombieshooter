@@ -26,6 +26,9 @@ public:
 	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
 	virtual AActor* ChoosePlayerStart_Implementation(AController* Player) override;
 
+	/** Return true if the mode handled the player's death (survival = game over). Sandbox returns false: respawn. */
+	virtual bool HandlePlayerDeath(class AZSPlayerCharacter* Player) { return false; }
+
 private:
 	UPROPERTY(Transient)
 	TObjectPtr<APlayerStart> CourseStart;

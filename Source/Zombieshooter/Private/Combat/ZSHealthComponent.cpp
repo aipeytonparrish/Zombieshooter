@@ -16,7 +16,7 @@ void UZSHealthComponent::BeginPlay()
 {
 	Super::BeginPlay();
 	Health = MaxHealth;
-	Armor = MaxArmor;
+	Armor = StartingArmor < 0.f ? MaxArmor : FMath::Min(StartingArmor, MaxArmor);
 	if (AActor* Owner = GetOwner())
 	{
 		Owner->OnTakeAnyDamage.AddDynamic(this, &ThisClass::HandleAnyDamage);
@@ -54,13 +54,24 @@ void UZSHealthComponent::Revive()
 {
 	bDead = false;
 	Health = MaxHealth;
-	Armor = MaxArmor;
+	Armor = StartingArmor < 0.f ? MaxArmor : FMath::Min(StartingArmor, MaxArmor);
 	TimeSinceDamage = 0.f;
 }
 
 void UZSHealthComponent::AddArmor(float Amount)
 {
 	Armor = FMath::Clamp(Armor + Amount, 0.f, MaxArmor);
+}
+
+float UZSHealthComponent::Heal(float Amount)
+{
+	if (bDead)
+	{
+		return 0.f;
+	}
+	const float Before = Health;
+	Health = FMath::Min(MaxHealth, Health + FMath::Max(0.f, Amount));
+	return Health - Before;
 }
 
 void UZSHealthComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)

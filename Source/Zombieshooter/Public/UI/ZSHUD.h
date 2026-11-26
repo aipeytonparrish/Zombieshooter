@@ -17,7 +17,23 @@ class ZOMBIESHOOTER_API AZSHUD : public AHUD
 public:
 	virtual void DrawHUD() override;
 
+	/** Short message near the bottom of the screen ("AMMO REFILLED", "+ARMOR PLATE"). */
+	static void Toast(const APawn* Player, const FText& Message);
+	void AddToast(const FText& Message);
+
 private:
+	void DrawSurvival(const class AZSGameState_Survival* GS, const class AZSPlayerCharacter* Char, float Scale);
+	void DrawInteractPrompt(const AZSPlayerCharacter* Char, float Scale);
+	void DrawToasts(float Scale);
+	void DrawCentered(const FString& Text, float Y, class UFont* Font, float TextScale, const FLinearColor& Color);
+
+	struct FToast
+	{
+		FText Text;
+		float Time = 0.f;
+	};
+	TArray<FToast> Toasts;
+
 	void DrawCrosshair(class UZSWeaponComponent* Weapons, float Scale);
 	void DrawHitMarkers(UZSWeaponComponent* Weapons, float Scale);
 	void DrawDamageNumbers(UZSWeaponComponent* Weapons, float Scale);

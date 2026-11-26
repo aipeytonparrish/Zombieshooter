@@ -9,6 +9,8 @@
 #include "Player/ZSFirstPersonArmsComponent.h"
 #include "Weapons/ZSWeaponComponent.h"
 #include "Combat/ZSHealthComponent.h"
+#include "Interaction/ZSInteractionComponent.h"
+#include "Core/ZSGameMode_Sandbox.h"
 #include "Engine/SkeletalMesh.h"
 #include "GameFramework/GameModeBase.h"
 #include "TimerManager.h"
@@ -61,6 +63,12 @@ AZSPlayerCharacter::AZSPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	HealthComponent->MaxHealth = 100.f;
 	HealthComponent->RegenDelay = 4.f;
 	HealthComponent->RegenRate = 30.f;
+	// Armor plates (pickups): 3 x 50, starts empty.
+	HealthComponent->MaxArmor = 150.f;
+	HealthComponent->StartingArmor = 0.f;
+	HealthComponent->ArmorAbsorption = 0.7f;
+
+	Interaction = CreateDefaultSubobject<UZSInteractionComponent>(TEXT("Interaction"));
 
 	// Full body (outfit) is for shadows / mirrors / third person; the owner never sees it directly.
 	GetMesh()->SetOwnerNoSee(true);
@@ -218,6 +226,7 @@ void AZSPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	EIC->BindAction(Set->Reload, ETriggerEvent::Started, this, &ThisClass::Input_Reload);
 	EIC->BindAction(Set->SwitchWeapon, ETriggerEvent::Started, this, &ThisClass::Input_SwitchWeapon);
 	EIC->BindAction(Set->FireMode, ETriggerEvent::Started, this, &ThisClass::Input_FireMode);
+	EIC->BindAction(Set->Interact, ETriggerEvent::Started, this, &ThisClass::Input_Interact);
 }
 
 FVector2D AZSPlayerCharacter::ApplyRadialDeadZone(const FVector2D& Raw, float Inner, float Outer)
@@ -425,7 +434,23 @@ void AZSPlayerCharacter::Input_FireStarted(const FInputActionValue& Value) { if 
 void AZSPlayerCharacter::Input_FireCompleted(const FInputActionValue& Value) { if (WeaponComponent) { WeaponComponent->SetTriggerHeld(false); } }
 void AZSPlayerCharacter::Input_ADSStarted(const FInputActionValue& Value) { if (WeaponComponent) { WeaponComponent->SetADSHeld(true); } }
 void AZSPlayerCharacter::Input_ADSCompleted(const FInputActionValue& Value) { if (WeaponComponent) { WeaponComponent->SetADSHeld(false); } }
-void AZSPlayerCharacter::Input_Reload(const FInputActionValue& Value) { if (WeaponComponent) { WeaponComponent->RequestReload(); } }
+void AZSPlayerCharacter::Input_Reload(const FInputActionValue& Value)
+{
+	// X is both Reload and Interact on the controller: looking at an interactable means interact, not reload.
+	if (Interaction && Interaction->GetFocused())
+	{
+		return;
+	}
+	if (WeaponComponent) { WeaponComponent->RequestReload(); }
+}
+
+void AZSPlayerCharacter::Input_Interact(const FInputActionValue& Value)
+{
+	if (Interaction)
+	{
+		Interaction->TryInteract();
+	}
+}
 void AZSPlayerCharacter::Input_SwitchWeapon(const FInputActionValue& Value) { if (WeaponComponent) { WeaponComponent->RequestSwitchWeapon(); } }
 void AZSPlayerCharacter::Input_FireMode(const FInputActionValue& Value) { if (WeaponComponent) { WeaponComponent->RequestCycleFireMode(); } }
 
@@ -469,6 +494,11 @@ void AZSPlayerCharacter::HandleDamaged(UZSHealthComponent* InHealth, float Damag
 
 void AZSPlayerCharacter::HandleDeath(UZSHealthComponent* InHealth, AController* Killer, AActor* DamageCauser)
 {
+	const bool bHandledByMode = [this]()
+	{
+		AZSGameMode_Sandbox* GM = GetWorld()->GetAuthGameMode<AZSGameMode_Sandbox>();
+		return GM && GM->HandlePlayerDeath(this);
+	}();
 	// Sandbox behaviour: freeze, then respawn. Milestone 5's survival mode turns this into game over.
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
@@ -479,6 +509,10 @@ void AZSPlayerCharacter::HandleDeath(UZSHealthComponent* InHealth, AController* 
 	{
 		WeaponComponent->SetTriggerHeld(false);
 		WeaponComponent->SetADSHeld(false);
+	}
+	if (bHandledByMode)
+	{
+		return;
 	}
 	FTimerHandle Respawn;
 	GetWorldTimerManager().SetTimer(Respawn, FTimerDelegate::CreateUObject(this, &ThisClass::SandboxRespawn), SandboxRespawnDelay, false);

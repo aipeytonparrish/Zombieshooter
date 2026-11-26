@@ -4,7 +4,7 @@
 $ErrorActionPreference = "Stop"
 $Project = Resolve-Path (Join-Path $PSScriptRoot "..\..\Zombieshooter.uproject")
 $Editor = "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe"
-$Scripts = @("create_core_materials.py", "import_rd704.py")
+$Scripts = @("create_core_materials.py", "import_rd704.py", "import_ammoboxes.py")
 
 foreach ($s in $Scripts) {
     $path = Join-Path $PSScriptRoot $s
@@ -14,3 +14,11 @@ foreach ($s in $Scripts) {
         ForEach-Object { $_.Line -replace '^\[[^\]]*\]\[[^\]]*\]', '' }
 }
 Write-Host "Done. Imported assets are in Content/ZS_Imported/."
+
+# Test map (ours, versioned): delete the old file first so it can be regenerated.
+$map = Join-Path $PSScriptRoot "..\..\Content\ZS\Maps\Test\L_ZSTest.umap"
+if (Test-Path $map) { Remove-Item $map -Force }
+Write-Host "== create_test_map.py"
+& $Editor $Project -run=pythonscript "-script=$(Join-Path $PSScriptRoot 'create_test_map.py')" -unattended -nullrhi -nosplash -stdout |
+    Select-String -Pattern "\[ZSImport\]|Traceback|Exception" |
+    ForEach-Object { $_.Line -replace '^\[[^\]]*\]\[[^\]]*\]', '' }

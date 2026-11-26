@@ -235,15 +235,15 @@ void AZSZombieBase::ApplyTypeDefaults()
 	UCharacterMovementComponent* Move = GetCharacterMovement();
 	if (ZombieType == EZSZombieType::Runner)
 	{
-		Health->MaxHealth = RunnerHealth;
-		MoveSpeed = FMath::FRandRange(RunnerSpeedRange.X, RunnerSpeedRange.Y);
+		Health->MaxHealth = RunnerHealth * HealthMultiplier;
+		MoveSpeed = FMath::FRandRange(RunnerSpeedRange.X, RunnerSpeedRange.Y) * SpeedMultiplier;
 		Move->RotationRate = FRotator(0.f, 620.f, 0.f);
 		Move->MaxAcceleration = 2400.f;
 	}
 	else
 	{
-		Health->MaxHealth = WalkerHealth;
-		MoveSpeed = FMath::FRandRange(WalkerSpeedRange.X, WalkerSpeedRange.Y);
+		Health->MaxHealth = WalkerHealth * HealthMultiplier;
+		MoveSpeed = FMath::FRandRange(WalkerSpeedRange.X, WalkerSpeedRange.Y) * SpeedMultiplier;
 	}
 	Health->Revive();   // apply the new max
 	Move->MaxWalkSpeed = MoveSpeed;
@@ -348,10 +348,36 @@ void AZSZombieBase::UpdateChase(float DeltaSeconds)
 		bDirectChase = !(AI && AI->ChaseActor(Target, AttackRange * 0.5f));
 	}
 
-	// No NavMesh in this level (or no path): steer straight at the player.
+	// No NavMesh in this level (or no path): steer straight at the player, sliding along walls when blocked.
 	if (bDirectChase)
 	{
-		AddMovementInput(ToTarget.GetSafeNormal2D());
+		const FVector Want = ToTarget.GetSafeNormal2D();
+		if (SidestepTime > 0.f)
+		{
+			SidestepTime -= DeltaSeconds;
+			AddMovementInput((SidestepDir + Want * 0.25f).GetSafeNormal2D());
+		}
+		else
+		{
+			AddMovementInput(Want);
+			const float Speed = GetVelocity().Size2D();
+			StuckTime = Speed < MoveSpeed * 0.3f ? StuckTime + DeltaSeconds : 0.f;
+			if (StuckTime > 0.5f)
+			{
+				// Pick the side with more free space.
+				StuckTime = 0.f;
+				const FVector Right = FVector::CrossProduct(FVector::UpVector, Want);
+				FCollisionQueryParams Params(SCENE_QUERY_STAT(ZSZombieSidestep), false, this);
+				const FVector Eye = GetActorLocation();
+				FHitResult HitR, HitL;
+				const bool bR = GetWorld()->LineTraceSingleByChannel(HitR, Eye, Eye + Right * 400.f, ECC_Visibility, Params);
+				const bool bL = GetWorld()->LineTraceSingleByChannel(HitL, Eye, Eye - Right * 400.f, ECC_Visibility, Params);
+				const float FreeR = bR ? HitR.Distance : 400.f;
+				const float FreeL = bL ? HitL.Distance : 400.f;
+				SidestepDir = (FreeR >= FreeL ? Right : -Right);
+				SidestepTime = FMath::FRandRange(0.8f, 1.4f);
+			}
+		}
 	}
 }
 
@@ -473,6 +499,7 @@ void AZSZombieBase::HandleDeath(UZSHealthComponent* InHealth, AController* Kille
 	}
 	State = EZSZombieState::Dead;
 	--LiveCount;
+	OnKilled.Broadcast(this, Killer, bLastHitHead);
 
 	if (UZSAimAssistSubsystem* Registry = GetWorld()->GetSubsystem<UZSAimAssistSubsystem>())
 	{

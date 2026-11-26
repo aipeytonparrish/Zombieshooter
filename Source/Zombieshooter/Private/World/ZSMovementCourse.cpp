@@ -6,6 +6,10 @@
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 #include "World/ZSTargetDummy.h"
+#include "World/ZSSpawnPoint.h"
+#include "World/ZSAmmoCrate.h"
+#include "Rounds/ZSGameMode_Survival.h"
+#include "EngineUtils.h"
 #include "Engine/World.h"
 
 AZSMovementCourse::AZSMovementCourse()
@@ -192,6 +196,16 @@ void AZSMovementCourse::Rebuild()
 void AZSMovementCourse::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Survival: no range targets; add spawn points + ammo crates unless the level already has its own.
+	if (GetWorld()->GetAuthGameMode<AZSGameMode_Survival>())
+	{
+		if (!TActorIterator<AZSSpawnPoint>(GetWorld()))
+		{
+			SpawnSurvivalProps();
+		}
+		return;
+	}
 	if (!bSpawnTargets)
 	{
 		return;
@@ -218,5 +232,27 @@ void AZSMovementCourse::BeginPlay()
 			Dummy->bMoving = Spec.bMoving;
 			Dummy->FinishSpawning(T);
 		}
+	}
+}
+
+void AZSMovementCourse::SpawnSurvivalProps()
+{
+	const FTransform& ToWorld = GetActorTransform();
+	const FVector2D Spawns[] = {
+		{ -1300.f, -3000.f }, { 3500.f, -3000.f }, { 8300.f, -3000.f },
+		{ -1300.f, 7000.f }, { 3500.f, 7000.f }, { 8300.f, 7000.f },
+		{ 8300.f, 2000.f }, { 6000.f, -1500.f }, { 6000.f, 4000.f },
+		{ 2500.f, 4600.f }, { 1500.f, -2000.f }, { -1300.f, 3500.f },
+	};
+	for (const FVector2D& S : Spawns)
+	{
+		const FVector Loc = ToWorld.TransformPosition(FVector(S.X, S.Y, 95.f));
+		GetWorld()->SpawnActor<AZSSpawnPoint>(AZSSpawnPoint::StaticClass(), Loc, FRotator::ZeroRotator);
+	}
+
+	const FVector Crates[] = { { -450.f, 450.f, 0.f }, { 2600.f, 5600.f, 0.f }, { 6200.f, 1500.f, 0.f } };
+	for (const FVector& C : Crates)
+	{
+		GetWorld()->SpawnActor<AZSAmmoCrate>(AZSAmmoCrate::StaticClass(), ToWorld.TransformPosition(C), GetActorRotation());
 	}
 }

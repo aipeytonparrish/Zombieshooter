@@ -7,6 +7,9 @@
 class UAnimSequence;
 class UZSHealthComponent;
 class UZSZombieAnimInstance;
+class AZSZombieBase;
+
+DECLARE_MULTICAST_DELEGATE_ThreeParams(FZSOnZombieKilled, AZSZombieBase* /*Zombie*/, AController* /*Killer*/, bool /*bHeadshot*/);
 
 UENUM(BlueprintType)
 enum class EZSZombieType : uint8
@@ -97,6 +100,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ZS|Zombie")
 	float CorpseLifetime = 25.f;
 
+	/** Round scaling, set by the round manager before the zombie finishes spawning. */
+	UPROPERTY(BlueprintReadWrite, Category = "ZS|Zombie", meta = (ExposeOnSpawn = true))
+	float HealthMultiplier = 1.f;
+
+	UPROPERTY(BlueprintReadWrite, Category = "ZS|Zombie", meta = (ExposeOnSpawn = true))
+	float SpeedMultiplier = 1.f;
+
+	/** Fires once when this zombie dies. */
+	FZSOnZombieKilled OnKilled;
+
 	UFUNCTION(BlueprintPure, Category = "ZS|Zombie")
 	EZSZombieState GetZombieState() const { return State; }
 
@@ -104,6 +117,7 @@ public:
 	bool IsDead() const { return State == EZSZombieState::Dead; }
 
 	UZSHealthComponent* GetHealth() const { return Health; }
+	bool IsDirectChasing() const { return bDirectChase; }
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual float TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
@@ -159,6 +173,9 @@ private:
 	float StateDuration = 0.f;
 	float RepathTimer = 0.f;
 	bool bDirectChase = false;
+	float StuckTime = 0.f;
+	float SidestepTime = 0.f;
+	FVector SidestepDir = FVector::ZeroVector;
 	int32 AttackIndex = 0;
 	float AttackHitFraction = 0.45f;
 	bool bAttackLanded = false;

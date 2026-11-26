@@ -65,3 +65,26 @@ def create_blood_decal():
 
 
 create_blood_decal()
+
+
+def import_round_curves():
+    """Data/ZSRounds.csv -> /Game/ZS/Data/CT_ZSRounds (CurveTable, linear interpolation). Edit the CSV and re-run."""
+    csv = os.path.join(zs.PROJECT_DIR, "Data", "ZSRounds.csv")
+    task = unreal.AssetImportTask()
+    task.filename = csv
+    task.destination_path = "/Game/ZS/Data"
+    task.destination_name = "CT_ZSRounds"
+    task.automated = True
+    task.replace_existing = True
+    task.save = True
+    factory = unreal.CSVImportFactory()
+    settings = unreal.CSVImportSettings()
+    settings.set_editor_property("import_type", unreal.CSVImportType.ECSV_CURVE_TABLE)
+    settings.set_editor_property("import_curve_interp_mode", unreal.RichCurveInterpMode.RCIM_LINEAR)
+    factory.set_editor_property("automated_import_settings", settings)
+    task.factory = factory
+    zs.asset_tools.import_asset_tasks([task])
+    zs.log("Imported round curves: " + str(list(task.imported_object_paths)))
+
+
+import_round_curves()

@@ -3,6 +3,7 @@
 #include "Weapons/ZSWeaponBase.h"
 #include "Player/ZSPlayerCharacter.h"
 #include "Core/ZSGameUserSettings.h"
+#include "Combat/ZSHealthComponent.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
@@ -36,14 +37,17 @@ void AZSHUD::DrawHUD()
 	}
 
 	const AZSPlayerCharacter* Char = Cast<AZSPlayerCharacter>(GetOwningPawn());
+	// Everything is authored for 1080p and scaled to the actual resolution.
+	const float Scale = Canvas->ClipY / 1080.f;
+	if (Char)
+	{
+		DrawHealth(Char, Scale);
+	}
 	UZSWeaponComponent* Weapons = Char ? Char->GetWeaponComponent() : nullptr;
-	if (!Weapons || !Weapons->GetCurrentWeapon())
+	if (!Weapons || !Weapons->GetCurrentWeapon() || (Char->GetHealthComponent() && Char->GetHealthComponent()->IsDead()))
 	{
 		return;
 	}
-
-	// Everything is authored for 1080p and scaled to the actual resolution.
-	const float Scale = Canvas->ClipY / 1080.f;
 	DrawCrosshair(Weapons, Scale);
 	DrawHitMarkers(Weapons, Scale);
 	DrawDamageNumbers(Weapons, Scale);
@@ -198,5 +202,55 @@ void AZSHUD::DrawAmmo(UZSWeaponComponent* Weapons, float Scale)
 		float LW, LH;
 		GetTextSize(Label, LW, LH, Small, 1.3f * Scale);
 		DrawText(Label, KillRed, Canvas->ClipX * 0.5f - LW * 0.5f, Canvas->ClipY * 0.5f + 60.f * Scale, Small, 1.3f * Scale);
+	}
+}
+
+void AZSHUD::DrawHealth(const AZSPlayerCharacter* Char, float Scale)
+{
+	const UZSHealthComponent* Health = Char->GetHealthComponent();
+	if (!Health)
+	{
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	const float Frac = FMath::Clamp(Health->GetHealth() / FMath::Max(Health->MaxHealth, 1.f), 0.f, 1.f);
+
+	// Red screen edge: a flash when hit plus a slow pulse when low.
+	const float Flash = FMath::Clamp(1.f - (Now - Char->GetLastDamageTime()) / 0.45f, 0.f, 1.f);
+	const float Low = Frac < 0.35f ? (0.35f - Frac) / 0.35f * (0.6f + 0.4f * FMath::Sin(Now * 5.f)) : 0.f;
+	const float EdgeAlpha = FMath::Clamp(Flash * 0.45f + Low * 0.35f, 0.f, 0.7f);
+	if (EdgeAlpha > 0.01f)
+	{
+		const int32 Steps = 10;
+		const float Band = Canvas->ClipY * 0.22f / Steps;
+		for (int32 i = 0; i < Steps; ++i)
+		{
+			const float A = EdgeAlpha * (1.f - float(i) / Steps) * 0.35f;
+			const FLinearColor C(0.55f, 0.f, 0.f, A);
+			const float O = i * Band;
+			DrawRect(C, O, O, Canvas->ClipX - 2.f * O, Band);                          // top
+			DrawRect(C, O, Canvas->ClipY - O - Band, Canvas->ClipX - 2.f * O, Band);   // bottom
+			DrawRect(C, O, O + Band, Band, Canvas->ClipY - 2.f * O - 2.f * Band);      // left
+			DrawRect(C, Canvas->ClipX - O - Band, O + Band, Band, Canvas->ClipY - 2.f * O - 2.f * Band); // right
+		}
+	}
+
+	// Health bar, bottom-left.
+	const float W = 320.f * Scale, H = 12.f * Scale;
+	const float X = 70.f * Scale, Y = Canvas->ClipY - 70.f * Scale - H;
+	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.55f), X - 2.f, Y - 2.f, W + 4.f, H + 4.f);
+	const FLinearColor BarColor = Frac < 0.35f ? FLinearColor(0.9f, 0.15f, 0.1f, 0.95f) : FLinearColor(0.92f, 0.92f, 0.92f, 0.9f);
+	DrawRect(BarColor, X, Y, W * Frac, H);
+	UFont* Small = GEngine->GetMediumFont();
+	DrawText(FString::Printf(TEXT("%d"), FMath::CeilToInt(Health->GetHealth())), HudWhite, X, Y - 26.f * Scale, Small, 1.3f * Scale);
+
+	if (Health->IsDead())
+	{
+		DrawRect(FLinearColor(0.15f, 0.f, 0.f, 0.45f), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
+		const FString Text = TEXT("YOU WERE KILLED");
+		float TW, TH;
+		UFont* Big = GEngine->GetLargeFont();
+		GetTextSize(Text, TW, TH, Big, 4.f * Scale);
+		DrawText(Text, KillRed, Canvas->ClipX * 0.5f - TW * 0.5f, Canvas->ClipY * 0.38f, Big, 4.f * Scale);
 	}
 }

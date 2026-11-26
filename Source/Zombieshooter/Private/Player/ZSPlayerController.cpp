@@ -9,6 +9,8 @@
 #include "TimerManager.h"
 #include "HAL/IConsoleManager.h"
 #include "Engine/World.h"
+#include "Zombies/ZSZombieBase.h"
+#include "EngineUtils.h"
 #include "Zombieshooter.h"
 
 AZSPlayerController::AZSPlayerController()
@@ -160,7 +162,7 @@ void AZSPlayerController::StartAutoShotIfRequested()
 		return;
 	}
 	const TCHAR* Cmd = FCommandLine::Get();
-	const bool bRange = FParse::Param(Cmd, TEXT("ZSAutoRange"));
+	const bool bRange = FParse::Param(Cmd, TEXT("ZSAutoRange")) && !FParse::Param(Cmd, TEXT("ZSAutoNoRange"));
 	const bool bADS = FParse::Param(Cmd, TEXT("ZSAutoADS"));
 	const bool bFire = FParse::Param(Cmd, TEXT("ZSAutoFire"));
 	if (FParse::Param(Cmd, TEXT("ZSAutoArmsDebug")))
@@ -175,13 +177,26 @@ void AZSPlayerController::StartAutoShotIfRequested()
 	float Pitch = 0.f, Yaw = 0.f;
 	FParse::Value(Cmd, TEXT("ZSAutoPitch="), Pitch);
 	FParse::Value(Cmd, TEXT("ZSAutoYaw="), Yaw);
+	int32 AutoZombies = 0, AutoZombieType = 2;
+	FParse::Value(Cmd, TEXT("ZSAutoZombies="), AutoZombies);
+	FParse::Value(Cmd, TEXT("ZSAutoZombieType="), AutoZombieType);
+	const bool bGod = FParse::Param(Cmd, TEXT("ZSAutoGod"));
+	const bool bBursts = FParse::Param(Cmd, TEXT("ZSAutoBursts"));
 
 	FTimerHandle Setup;
-	GetWorldTimerManager().SetTimer(Setup, FTimerDelegate::CreateWeakLambda(this, [this, bRange, bADS, bFire, WeaponSlot, Pitch, Yaw]()
+	GetWorldTimerManager().SetTimer(Setup, FTimerDelegate::CreateWeakLambda(this, [this, bRange, bADS, bFire, WeaponSlot, Pitch, Yaw, AutoZombies, AutoZombieType, bGod]()
 	{
 		if (bRange)
 		{
 			ZSRange();
+		}
+		if (bGod)
+		{
+			ZSGod();
+		}
+		if (AutoZombies > 0)
+		{
+			ZSZombies(AutoZombies, AutoZombieType, 6.f);
 		}
 		SetControlRotation(FRotator(Pitch, Yaw, 0.f) + (bRange ? FRotator::ZeroRotator : GetControlRotation()));
 		if (const AZSPlayerCharacter* Char = Cast<AZSPlayerCharacter>(GetPawn()))
@@ -198,6 +213,22 @@ void AZSPlayerController::StartAutoShotIfRequested()
 		}
 	}), 0.5f, false);
 
+	if (bBursts)
+	{
+		// Short controlled bursts: press 0.18 s, release 0.3 s, repeat.
+		FTimerHandle BurstTimer;
+		GetWorldTimerManager().SetTimer(BurstTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			const AZSPlayerCharacter* Char = Cast<AZSPlayerCharacter>(GetPawn());
+			if (UZSWeaponComponent* Weapons = Char ? Char->GetWeaponComponent() : nullptr)
+			{
+				Weapons->SetTriggerHeld(true);
+				FTimerHandle Release;
+				GetWorldTimerManager().SetTimer(Release, FTimerDelegate::CreateWeakLambda(this, [Weapons]() { Weapons->SetTriggerHeld(false); }), 0.18f, false);
+			}
+		}), 0.48f, true, 1.f);
+	}
+
 	FTimerHandle Shot;
 	GetWorldTimerManager().SetTimer(Shot, FTimerDelegate::CreateWeakLambda(this, [this]()
 	{
@@ -210,4 +241,56 @@ void AZSPlayerController::StartAutoShotIfRequested()
 		ConsoleCommand(TEXT("quit"));
 	}), FMath::Max(Delay, 1.f) + 1.5f, false);
 #endif
+}
+
+void AZSPlayerController::ZSZombies(int32 Count, int32 Type, float SpreadDegrees)
+{
+	APawn* P = GetPawn();
+	UWorld* World = GetWorld();
+	if (!P || !World)
+	{
+		return;
+	}
+	const FVector Origin = P->GetActorLocation();
+	const float BaseYaw = GetControlRotation().Yaw;
+	int32 Spawned = 0;
+	for (int32 i = 0; i < FMath::Clamp(Count, 1, 60); ++i)
+	{
+		const float Yaw = BaseYaw + FMath::FRandRange(-SpreadDegrees, SpreadDegrees);
+		const float Dist = FMath::FRandRange(1200.f, 2500.f);
+		const FVector Flat = Origin + FRotator(0.f, Yaw, 0.f).Vector() * Dist;
+
+		FHitResult Hit;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(ZSZombieSpawn), false, P);
+		if (!World->LineTraceSingleByChannel(Hit, Flat + FVector(0.f, 0.f, 600.f), Flat - FVector(0.f, 0.f, 1500.f), ECC_Visibility, Params))
+		{
+			continue;
+		}
+		const FVector Loc = Hit.ImpactPoint + FVector(0.f, 0.f, 95.f);
+		const FTransform T(FRotator(0.f, Yaw + 180.f, 0.f), Loc);
+		if (AZSZombieBase* Z = World->SpawnActorDeferred<AZSZombieBase>(AZSZombieBase::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn))
+		{
+			Z->ZombieType = Type == 0 ? EZSZombieType::Walker : (Type == 1 ? EZSZombieType::Runner : (FMath::FRand() < 0.35f ? EZSZombieType::Runner : EZSZombieType::Walker));
+			Z->FinishSpawning(T);
+			++Spawned;
+		}
+	}
+	UE_LOG(LogZS, Log, TEXT("Spawned %d zombies (%d alive)."), Spawned, AZSZombieBase::GetLiveCount());
+}
+
+void AZSPlayerController::ZSKillZombies()
+{
+	for (TActorIterator<AZSZombieBase> It(GetWorld()); It; ++It)
+	{
+		It->Destroy();
+	}
+}
+
+void AZSPlayerController::ZSGod()
+{
+	if (APawn* P = GetPawn())
+	{
+		P->SetCanBeDamaged(!P->CanBeDamaged());
+		UE_LOG(LogZS, Log, TEXT("God mode %s"), P->CanBeDamaged() ? TEXT("off") : TEXT("on"));
+	}
 }

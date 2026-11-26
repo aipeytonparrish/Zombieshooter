@@ -8,6 +8,9 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Player/ZSFirstPersonArmsComponent.h"
 #include "Weapons/ZSWeaponComponent.h"
+#include "Combat/ZSHealthComponent.h"
+#include "GameFramework/GameModeBase.h"
+#include "TimerManager.h"
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
 #include "Engine/Engine.h"
@@ -44,6 +47,11 @@ AZSPlayerCharacter::AZSPlayerCharacter(const FObjectInitializer& ObjectInitializ
 
 	WeaponComponent = CreateDefaultSubobject<UZSWeaponComponent>(TEXT("WeaponComponent"));
 
+	HealthComponent = CreateDefaultSubobject<UZSHealthComponent>(TEXT("Health"));
+	HealthComponent->MaxHealth = 100.f;
+	HealthComponent->RegenDelay = 4.f;
+	HealthComponent->RegenRate = 30.f;
+
 	// Full body (outfit) is for shadows / mirrors / third person; the owner never sees it directly.
 	GetMesh()->SetOwnerNoSee(true);
 	GetMesh()->bCastHiddenShadow = true;
@@ -58,6 +66,8 @@ void AZSPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	CurrentEyeHeight = BaseEyeHeight;
+	HealthComponent->OnDamaged.AddDynamic(this, &ThisClass::HandleDamaged);
+	HealthComponent->OnDeath.AddDynamic(this, &ThisClass::HandleDeath);
 }
 
 // =============================================================================================
@@ -427,4 +437,58 @@ void AZSPlayerCharacter::DrawMovementDebug() const
 		LastMoveInput.X, LastMoveInput.Y, bSprintToggled ? TEXT("on") : TEXT("off")));
 	GEngine->AddOnScreenDebugMessage(7003, 0.f, FColor::Silver,
 		TEXT("[ZS] Pad: L3 sprint | A jump x2 / mantle | B crouch-slide | LB dash | D-pad Down hide.   KB: Shift / Space / Ctrl,C / Alt / F3"));
+}
+
+// =============================================================================================
+// Health
+// =============================================================================================
+
+void AZSPlayerCharacter::HandleDamaged(UZSHealthComponent* InHealth, float Damage, const UDamageType* DamageType, AController* InstigatedBy, AActor* DamageCauser)
+{
+	LastDamageTime = GetWorld()->GetTimeSeconds();
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		PC->PlayDynamicForceFeedback(0.7f, 0.2f, true, true, true, true);
+	}
+}
+
+void AZSPlayerCharacter::HandleDeath(UZSHealthComponent* InHealth, AController* Killer, AActor* DamageCauser)
+{
+	// Sandbox behaviour: freeze, then respawn. Milestone 5's survival mode turns this into game over.
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		DisableInput(PC);
+	}
+	CancelSprint();
+	if (WeaponComponent)
+	{
+		WeaponComponent->SetTriggerHeld(false);
+		WeaponComponent->SetADSHeld(false);
+	}
+	FTimerHandle Respawn;
+	GetWorldTimerManager().SetTimer(Respawn, FTimerDelegate::CreateUObject(this, &ThisClass::SandboxRespawn), SandboxRespawnDelay, false);
+}
+
+void AZSPlayerCharacter::SandboxRespawn()
+{
+	if (AGameModeBase* GM = GetWorld()->GetAuthGameMode())
+	{
+		if (AActor* Start = GM->FindPlayerStart(GetController()))
+		{
+			TeleportTo(Start->GetActorLocation(), Start->GetActorRotation());
+			if (Controller)
+			{
+				Controller->SetControlRotation(Start->GetActorRotation());
+			}
+		}
+	}
+	HealthComponent->Revive();
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		EnableInput(PC);
+	}
+	if (WeaponComponent)
+	{
+		WeaponComponent->RefillAllAmmo();
+	}
 }

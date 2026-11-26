@@ -79,3 +79,33 @@ these paths and falls back to placeholders when they're missing.
 4. Windows' own `tar.exe` (`C:\Windows\System32\tar.exe -xf file.rar -C dest`) opens both .zip and .rar files.
    Note: Git Bash's `tar` is a different program and can't.
 5. Or ask Claude: "restore the third-party packs from the Desktop archives".
+
+---
+
+## 6. Fab packs added 2026-11-26 (installed straight into `Content/`, git-ignored)
+
+Restore on another PC by adding them to the project again from Fab / the Epic launcher library.
+
+| Folder | What | Skeleton | Needs plugin | Use |
+|---|---|---|---|---|
+| `InfimaGames/TacticalFPSAnimations` | AAA first-person assault-rifle set: fire (semi/auto/aimed/empty), tactical + empty reloads (+aimed, quick), equip/holster, ADS in/out, walk/run/sprint/jump, inspect, mag check, melee, grenade throw, heal; modular AR mesh, AR audio, muzzle-flash Niagara | `SKEL_TFA_Mannequin` (UE5 Manny bones) | ControlRig | **Rifle FP animations + sounds + muzzle flash (M3 upgrade)** |
+| `ProFPSAnimationBundleV2` | 13 FP sets: rifle v1/v2, **pistol v1/v2** (idle, walk, sprint, fire, ADS, reload + empty reload, draw, holster), revolver, sawed-off, sniper, **knife**, blade, **grenade**, katana, FP zombie arms; pistol / rifle / grenade meshes; hands + gloves | Per-set `SK_Mannequin_Arms_Skeleton` (UE5 Manny bones) | GameplayCameras, NiagaraAnimNotifies | **Pistol, knife, grenade, shotgun FP animations (M3/M8)** |
+| `ExcellentProceduralRecoils` | Procedural recoil/ADS/idle system, ~33 presets; skeletal example guns incl. **SMG**, pistol, AK, shotgun, sniper, LMG; muzzle flash | Own Manny copy; per-gun skeletons | GameplayCameras, MetasoundEditor | Recoil reference, SMG mesh |
+| `RealWeaponSoundFX` | 1,313 sounds: per-gun single / loop / silenced shots, mag in/out, reload, equip (AR ×7, pistol ×6, SMG ×8, shotgun, MG, sniper, revolver…); bullet impacts incl. flesh | — | — | **Gun sounds + impact sounds** |
+| `WeaponVerse1` | 18,350 sounds: ~60 named guns, shots at 5/25/100/200 m in field/room, silenced, bolts, mags, draws, drops, sonic booms | — | — | **Premium gunshots + distance tails** |
+| `GunSoundsPackVol1` | 19 gunshots, dry fire, load/unload, pump, hammer, safety; 3 explosions | — | — | Dry fire / foley, explosions |
+| `Mocap_Zombie` | 45 zombie anims (10 attacks, walk → sprint, grab/struggle pairs, hit reactions), UE4 + UE5 versions | UE5 Manny copy / UE4 Mannequin | — | **More zombie variety (M4/M11)** |
+| `Hitreact_Content` | 118 directional hit reacts + stun + hit-react component | UE5 Manny (`/Game/Characters`) | **Chooser** | Zombie hit reacts (M11) |
+| `InteractionAnimation` | Door kick/shoulder, cabinet, drawer, chest, generator, lever, valve + props | UE5 Manny | — | Interactions (M5/M7) |
+| `RealisticFireFX` | ~50 fire / spark Niagara systems | — | — | Burning city (M14), Exploder / boss (M11/M12) |
+| `CityCore_HongKong` | 5.4 GB city kit: buildings, roads, sidewalks, market, pipes, trash, poles; day/night maps | — | GeometryScripting (editor tools) | Street filler props (M14); signage is Asian, not NYC |
+| `UltimateTraversals` | Vault / climb / ladder / window traversal anims (UE4 + UE5) | UE4 / UE5 Manny | ControlRig | Possible mantle polish later |
+| `MC_Idles_Pack`, `MaleLocomotionSet`, `MovementAnimsetPro`, `RifleAnimsetPro`, `RifleMotionMatchingLoco` | Third-person civilian idles / locomotion / rifle motion matching | various | RifleMotionMatchingLoco needs PoseSearch, Chooser, MotionWarping, AnimationWarping, BlendStack | Mostly not needed for a first-person game (over-shoulder camera / NPCs later) |
+| `ModularSciFi`, `FastParallaxOcclusionMapping` | Sci-fi gun parts; parallax material functions | — | — | Probably unused (maybe boss ray gun); material polish |
+| `Characters`, `Input`, `LevelPrototyping`, `ThirdPerson` | UE5 third-person template content pulled in by the packs | UE5 Manny | — | Dependency of Hitreact etc. — leave in place |
+
+Gaps that remain: **no blood Niagara effect** in any pack (Milestone 4 uses the code-driven droplets + the project's own
+blood decal), **no UI hit-marker / kill-confirm sound**, and only one SMG mesh (no SMG FP animations).
+
+Note: packs that need plugins we haven't enabled (Chooser, PoseSearch, GameplayCameras, …) will log warnings if their
+demo assets are opened in the editor. Nothing in our code references them; plugins get enabled when a pack is put to use.

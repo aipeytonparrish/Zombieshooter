@@ -78,6 +78,18 @@ public:
 	UFUNCTION(Exec)
 	void ZSRange();
 
+	/** ZSZombies 10 2 55 -> spawn N zombies 12-25 m ahead. Type: 0 = walkers, 1 = runners, 2 = mix. Spread = +/- degrees around your aim. */
+	UFUNCTION(Exec)
+	void ZSZombies(int32 Count = 8, int32 Type = 2, float SpreadDegrees = 55.f);
+
+	/** ZSKillZombies -> removes every zombie. */
+	UFUNCTION(Exec)
+	void ZSKillZombies();
+
+	/** ZSGod -> toggles player invulnerability (testing). */
+	UFUNCTION(Exec)
+	void ZSGod();
+
 protected:
 	virtual void SetupInputComponent() override;
 	virtual void BeginPlay() override;

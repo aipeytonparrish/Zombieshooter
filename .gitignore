@@ -124,3 +124,33 @@ Thumbs.db
 # Python bytecode from the import scripts
 __pycache__/
 *.pyc
+
+# ---- Fab packs added 2026-11-26 (git-ignored like the other purchased packs; see Docs/ThirdPartyAssets.md) ----
+/Content/Characters/
+/Content/CityCore_HongKong/
+/Content/ExcellentProceduralRecoils/
+/Content/FastParallaxOcclusionMapping/
+/Content/GunSoundsPackVol1/
+/Content/Hitreact_Content/
+/Content/InfimaGames/
+/Content/Input/
+/Content/InteractionAnimation/
+/Content/LevelPrototyping/
+/Content/MC_Idles_Pack/
+/Content/MaleLocomotionSet/
+/Content/Mocap_Zombie/
+/Content/ModularSciFi/
+/Content/MovementAnimsetPro/
+/Content/ProFPSAnimationBundleV2/
+/Content/RealWeaponSoundFX/
+/Content/RealisticFireFX/
+/Content/RifleAnimsetPro/
+/Content/RifleMotionMatchingLoco/
+/Content/ThirdPerson/
+/Content/UltimateTraversals/
+/Content/WeaponVerse1/
+# One-file-per-actor data that came with the packs' demo maps
+/Content/__ExternalActors__/*
+!/Content/__ExternalActors__/ZS/
+/Content/__ExternalObjects__/*
+!/Content/__ExternalObjects__/ZS/

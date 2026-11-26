@@ -49,6 +49,10 @@ source, modular RD-704 AK with attachments, first-person M249 animations, muzzle
 types, 5 survivor characters, masks/bandanas, hair cards.
 
 ### Biggest gaps right now (in priority order)
+> **Update (later the same day):** the owner added Fab packs that cover gaps 1–3 — InfimaGames + ProFPS first-person
+> animations (rifle, pistol, knife, grenade), pistol / SMG meshes, and three big gun-sound libraries. They get wired in
+> as an M3 upgrade pass. See `Docs/ThirdPartyAssets.md` section 6. Still missing: zombie sounds, blood VFX, UI hit sounds.
+
 1. **First-person weapon animations on the UE5 Manny skeleton** (idle, walk, sprint, fire, ADS, tactical reload,
    empty reload, equip/unequip) for a **pistol**, **SMG** and **assault rifle**. The arm packs have meshes only.
    Without these, Milestone 3 uses procedural motion (code-driven recoil/sway/reload dip) — that works, but real
@@ -93,7 +97,11 @@ Per weapon: skeletal mesh with sockets **`Muzzle`**, **`Eject`**, **`Mag`**, opt
 (idle, fire, ADS idle, ADS fire, tactical reload, empty reload, equip, unequip, sprint); sounds (fire close/distant,
 tail, dry fire, mag out/in, bolt, equip); muzzle flash Niagara; shell casing mesh; crosshair + hit-marker textures.
 
-### Milestone 4 — Zombies v1 (Walker, Runner)
+### Milestone 4 — Zombies v1 (built with ZombieCity01 + ZombieDoctor and their own animations)
+Still needed: **zombie sounds** (idle groans, chase screams, attack, hurt, death — 5–10 variations each) and ideally a
+**blood Niagara effect / blood decal textures** (none of the packs has one; code droplets + a procedural decal are used).
+
+Original M4 list:
 Mannequin-skeleton zombie meshes with a physics asset; anims: idle, shamble walk, run, attack (2–3), hit reacts,
 death (2–3, ragdoll takes over after); groans/attack/death sounds; blood impact Niagara + blood decal textures.
 

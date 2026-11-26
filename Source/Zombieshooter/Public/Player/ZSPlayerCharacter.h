@@ -8,6 +8,7 @@ class UZSCameraComponent;
 class UZSMovementComponent;
 class UZSFirstPersonArmsComponent;
 class UZSWeaponComponent;
+class UZSHealthComponent;
 struct FInputActionValue;
 
 /**
@@ -37,6 +38,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "ZS|Player")
 	UZSWeaponComponent* GetWeaponComponent() const { return WeaponComponent; }
 
+	UFUNCTION(BlueprintPure, Category = "ZS|Player")
+	UZSHealthComponent* GetHealthComponent() const { return HealthComponent; }
+
+	/** World time the player last took damage (HUD damage flash). */
+	float GetLastDamageTime() const { return LastDamageTime; }
+
 	/** Ends sprinting (toggle or held). Used when firing or aiming. */
 	void CancelSprint();
 
@@ -63,6 +70,14 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "ZS|Player")
 	TObjectPtr<UZSWeaponComponent> WeaponComponent;
+
+	/** Health + regen. Armor arrives in Milestone 5. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "ZS|Player")
+	TObjectPtr<UZSHealthComponent> HealthComponent;
+
+	/** Sandbox only: seconds before respawning after death (the round system replaces this with game over). */
+	UPROPERTY(EditDefaultsOnly, Category = "ZS|Player")
+	float SandboxRespawnDelay = 3.f;
 
 	// ---- Look tuning (controller) ----
 
@@ -124,6 +139,16 @@ private:
 
 	void UpdateEyeHeight(float DeltaSeconds);
 	void DrawMovementDebug() const;
+
+	UFUNCTION()
+	void HandleDamaged(UZSHealthComponent* InHealth, float Damage, const UDamageType* DamageType, AController* InstigatedBy, AActor* DamageCauser);
+
+	UFUNCTION()
+	void HandleDeath(UZSHealthComponent* InHealth, AController* Killer, AActor* DamageCauser);
+
+	void SandboxRespawn();
+
+	float LastDamageTime = -10.f;
 
 	float GamepadFullDeflectionTime = 0.f;
 	float CurrentEyeHeight = 0.f;

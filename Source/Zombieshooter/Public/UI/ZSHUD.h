@@ -22,4 +22,5 @@ private:
 	void DrawHitMarkers(UZSWeaponComponent* Weapons, float Scale);
 	void DrawDamageNumbers(UZSWeaponComponent* Weapons, float Scale);
 	void DrawAmmo(UZSWeaponComponent* Weapons, float Scale);
+	void DrawHealth(const class AZSPlayerCharacter* Char, float Scale);
 };

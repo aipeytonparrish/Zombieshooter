@@ -4,7 +4,7 @@
 $ErrorActionPreference = "Stop"
 $Project = Resolve-Path (Join-Path $PSScriptRoot "..\..\Zombieshooter.uproject")
 $Editor = "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe"
-$Scripts = @("import_rd704.py")
+$Scripts = @("create_core_materials.py", "import_rd704.py")
 
 foreach ($s in $Scripts) {
     $path = Join-Path $PSScriptRoot $s

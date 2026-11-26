@@ -199,3 +199,40 @@ What you should feel:
 - The pistol is grey boxes (no pistol mesh supplied yet). No weapon sounds, muzzle-flash effect or shell casings yet
   — only a muzzle light. See `Docs/AssetRequests.md`.
 - The RD-704's front sight post shows inside the scope (it's part of the receiver mesh).
+
+---
+
+## Milestone 4 — Zombies v1 (Walker + Runner)
+
+### One-time
+- Run `Tools\Import\run_imports.ps1` again (editor closed) — it now also creates the blood decal material
+  (`Content/ZS/Materials/M_ZS_BloodDecal`, committed to git, so on this PC it's already there).
+- Zombies use the owner's **ZombieCity01** and **ZombieDoctor** packs with their own animations — no setup needed.
+
+### NavMesh for your test map (so zombies path around obstacles)
+In `L_MovementTest` (or any map): **Place Actors → search "Nav Mesh Bounds Volume"** → drag it in → in Details set
+**Brush Settings X 12000, Y 12000, Z 2000** and Location `X 3000, Y 2000, Z 0` so it covers the whole course →
+press **P** in the viewport to see the green walkable area → Save. Without a NavMesh (e.g. the quick-test command)
+zombies walk straight at you and can get stuck on walls — that's expected.
+
+### Test it
+In Play, open the console (`) and type:
+
+| Command | Effect |
+|---|---|
+| `ZSZombies 8` | Spawn 8 zombies 12–25 m ahead (mix of walkers and runners) |
+| `ZSZombies 6 0` / `ZSZombies 6 1` | Walkers only / runners only (third number = spread in degrees, default 55) |
+| `ZSKillZombies` | Remove all zombies |
+| `ZSGod` | Toggle invulnerability |
+
+- **Walkers** shamble (95–140 cm/s), 110 HP. **Runners** often roar first, then sprint (390–470 cm/s), 75 HP.
+- Random character (hoodie or doctor) and skin (3 colour variants each).
+- They attack in melee (20 damage); your health regenerates after 4 s without damage. In this sandbox you respawn 3 s
+  after dying (the round system in Milestone 5 turns that into game over).
+- Shooting: headshots (×2) hit the real head bone; they flinch when hit (always on headshots); on death they go
+  **ragdoll** and get shoved by the killing shot. Blood droplets spray on every hit, splats land on walls / floor behind
+  them, and a pool forms under bodies. Bodies are removed after 25 s.
+
+### Known placeholders
+- Basic blood only (code droplets + decal). Niagara blood spray, screen blood and dismemberment come in Milestone 11.
+- No zombie sounds yet (none supplied). The new Mocap_Zombie / Hitreact packs add variety in Milestone 11.

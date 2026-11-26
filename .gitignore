@@ -5,7 +5,7 @@
 *.slo
 *.lo
 *.o
-*.obj
+# *.obj  (removed: OBJ meshes are tracked by LFS; compiled objects live in Intermediate/)
 
 # Precompiled Headers
 *.gch
@@ -74,3 +74,32 @@ Plugins/**/Intermediate/*
 
 # Cache files for the editor to use
 DerivedDataCache/*
+
+# ---- Zombieshooter additions ----
+# IDE / editor files
+.idea/
+.vscode/
+*.code-workspace
+*.uproject.user
+compile_commands.json
+
+# Engine-generated per-machine folders (also inside nested plugins)
+Platforms/*/Binaries/*
+Platforms/*/Intermediate/*
+**/Saved/*
+**/Intermediate/*
+**/DerivedDataCache/*
+
+# Packaged builds
+Packaged/
+ArchivedBuilds/
+
+# Per-user content folders and recovery files
+Content/Developers/
+Content/Collections/
+*.uasset.bak
+*.umap.bak
+
+# OS clutter
+Thumbs.db
+.DS_Store

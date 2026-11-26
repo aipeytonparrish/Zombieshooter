@@ -77,6 +77,13 @@ Content/ZS/
 
 The world settings game mode is left blank on purpose — the project default (`ZSGameMode_Sandbox`) is used.
 
+### Quick test without making a map (full screen)
+Close the editor first, then run this in PowerShell. It opens the engine's basic template map, spawns the course
+at runtime and starts the game full screen. Press Alt+F4 to quit.
+```powershell
+& "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" "C:\Users\Owner\Documents\Unreal Projects\Zombieshooter\Zombieshooter.uproject" "/Engine/Maps/Templates/Template_Default?Course" -game -fullscreen
+```
+
 ### Test it
 1. Plug in the controller **before** pressing Play.
 2. Press **Play** (Alt+P). Click into the viewport once so it has focus.

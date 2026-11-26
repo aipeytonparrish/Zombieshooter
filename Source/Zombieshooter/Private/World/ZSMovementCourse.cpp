@@ -5,6 +5,8 @@
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
+#include "World/ZSTargetDummy.h"
+#include "Engine/World.h"
 
 AZSMovementCourse::AZSMovementCourse()
 {
@@ -99,7 +101,7 @@ void AZSMovementCourse::Rebuild()
 	// ---- Floor (top surface at Z = 0) --------------------------------------------------------
 	if (bBuildFloor)
 	{
-		AddBox(FVector(-1500.f, -3200.f, -40.f), FVector(8500.f, 4600.f, 0.f));
+		AddBox(FVector(-1500.f, -3200.f, -40.f), FVector(8500.f, 7200.f, 0.f));
 	}
 
 	// ---- Lane 1: Dash gap (Y = -2400) --------------------------------------------------------
@@ -173,5 +175,48 @@ void AZSMovementCourse::Rebuild()
 			X += 350.f;
 		}
 		SetLabel(5, FVector(200.f, Y, 260.f), TEXT("DOUBLE JUMP / AIR-MANTLE STEPS (+2.5m)"));
+	}
+
+	// ---- Lane 7: Shooting range (Y = 5400 .. 6800) ----------------------------------------------
+	// Firing line at X = 0. Targets at 10 / 20 / 35 / 50 m (spawned in BeginPlay), a strafing target at 20 m,
+	// a 20 cm wall (penetrable by the rifle) and a 60 cm wall (not) with targets behind them.
+	{
+		AddBox(FVector(-60.f, 5000.f, 0.f), FVector(-40.f, 7000.f, 100.f));       // firing-line rail
+		AddBox(FVector(1400.f, 6250.f, 0.f), FVector(1420.f, 6550.f, 220.f));    // thin wall (20 cm)
+		AddBox(FVector(1400.f, 6650.f, 0.f), FVector(1460.f, 6950.f, 220.f));    // thick wall (60 cm)
+		AddBox(FVector(5600.f, 4900.f, 0.f), FVector(5700.f, 7100.f, 600.f));    // backstop
+		SetLabel(6, FVector(200.f, 5900.f, 260.f), TEXT("SHOOTING RANGE 10 / 20 / 35 / 50 m  (walls: 20 cm / 60 cm)"));
+	}
+}
+
+void AZSMovementCourse::BeginPlay()
+{
+	Super::BeginPlay();
+	if (!bSpawnTargets)
+	{
+		return;
+	}
+
+	struct FTargetSpec { FVector Location; bool bMoving; };
+	const FTargetSpec Specs[] = {
+		{ FVector(1000.f, 5300.f, 0.f), false },
+		{ FVector(1000.f, 5650.f, 0.f), false },
+		{ FVector(2000.f, 5900.f, 0.f), true  },   // strafes 4 m
+		{ FVector(1700.f, 6400.f, 0.f), false },   // behind the thin wall
+		{ FVector(1700.f, 6800.f, 0.f), false },   // behind the thick wall
+		{ FVector(3500.f, 5400.f, 0.f), false },
+		{ FVector(3500.f, 5900.f, 0.f), false },
+		{ FVector(5000.f, 5650.f, 0.f), false },
+	};
+
+	const FTransform& ToWorld = GetActorTransform();
+	for (const FTargetSpec& Spec : Specs)
+	{
+		const FTransform T(GetActorRotation(), ToWorld.TransformPosition(Spec.Location));
+		if (AZSTargetDummy* Dummy = GetWorld()->SpawnActorDeferred<AZSTargetDummy>(AZSTargetDummy::StaticClass(), T, this, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+		{
+			Dummy->bMoving = Spec.bMoving;
+			Dummy->FinishSpawning(T);
+		}
 	}
 }

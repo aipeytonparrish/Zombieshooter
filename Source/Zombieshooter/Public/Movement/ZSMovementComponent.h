@@ -50,6 +50,9 @@ public:
 
 	// ---- Input-facing API (called by the character) ------------------------------------------
 
+	/** Multiplier on ground jog / crouch speed (aiming down sights slows the player). */
+	void SetExternalSpeedScale(float Scale) { ExternalSpeedScale = FMath::Clamp(Scale, 0.1f, 2.f); }
+
 	void SetSprintInput(bool bWantsSprint) { bWantsToSprint = bWantsSprint; }
 	bool GetSprintInput() const { return bWantsToSprint; }
 
@@ -298,6 +301,8 @@ public:
 	// ---- Air ----
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ZS|Movement|Air")
 	float ZSAirControl = 0.55f;
+
+	float ExternalSpeedScale = 1.f;
 
 private:
 	// ---- Intent (replicated-ready via compressed flags) ----

@@ -23,6 +23,9 @@ UZSGameUserSettings::UZSGameUserSettings()
 	bToggleSprintKeyboard = false;
 
 	bToggleCrouch = true;
+	bAimAssist = true;
+	AimAssistStrength = 1.f;
+	bShowDamageNumbers = true;
 }
 
 UZSGameUserSettings* UZSGameUserSettings::Get()
@@ -58,6 +61,9 @@ void UZSGameUserSettings::SetToDefaults()
 	MouseADSSensitivity = Defaults->MouseADSSensitivity;
 	bInvertMouseY = Defaults->bInvertMouseY;
 	bToggleSprintKeyboard = Defaults->bToggleSprintKeyboard;
+	bAimAssist = Defaults->bAimAssist;
+	AimAssistStrength = Defaults->AimAssistStrength;
+	bShowDamageNumbers = Defaults->bShowDamageNumbers;
 	bToggleCrouch = Defaults->bToggleCrouch;
 }
 

@@ -77,7 +77,18 @@ Movement VFX (optional, later): dash streak, slide dust/sparks — `VFX/Player/`
 
 ## Coming next (so you can plan ahead)
 
-### Milestone 3 — Gunplay (2 test weapons: pistol + SMG)
+### Milestone 3 — Gunplay (built with the RD-704 rifle + a placeholder pistol)
+Still needed, in priority order:
+- **FPS animations on the UE5 Manny skeleton** for rifle + pistol: idle, walk, sprint, fire, ADS idle/fire, tactical
+  reload, empty reload, equip, unequip. Until then arms are code-posed (works, but real reloads look far better).
+- **Pistol mesh** (and an SMG if you want the spec's pistol + SMG pair): skeletal mesh with sockets `Muzzle`, `Eject`,
+  `Mag`, `Optic`, or modular static parts like the RD-704.
+- **Weapon sounds** per gun: fire close / distant / tail, dry fire, mag out / in, bolt, equip. Plus a hit-marker tick and a
+  kill-confirm sound.
+- **Muzzle flash**: the supplied flash meshes will be turned into a Niagara effect; a flash texture sheet would help.
+- Shell casing: the supplied bullets pack covers it (imported later).
+
+Original M3 list:
 Per weapon: skeletal mesh with sockets **`Muzzle`**, **`Eject`**, **`Mag`**, optic rail socket **`Optic`**; FP arm anims
 (idle, fire, ADS idle, ADS fire, tactical reload, empty reload, equip, unequip, sprint); sounds (fire close/distant,
 tail, dry fire, mag out/in, bolt, equip); muzzle flash Niagara; shell casing mesh; crosshair + hit-marker textures.

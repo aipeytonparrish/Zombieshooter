@@ -62,8 +62,25 @@ public:
 	UFUNCTION(Exec)
 	void ZSMoveDebug();
 
+	/** ZSGiveAmmo -> refills every carried weapon. */
+	UFUNCTION(Exec)
+	void ZSGiveAmmo();
+
+	/** ZSAimAssist 1 -> controller aim-assist strength (0 = off, 1 = default, 1.5 = strong). */
+	UFUNCTION(Exec)
+	void ZSAimAssist(float Strength);
+
+	/** ZSDamageNumbers 0/1 */
+	UFUNCTION(Exec)
+	void ZSDamageNumbers(bool bEnabled);
+
+	/** ZSRange -> teleports to the shooting range firing line (movement course). */
+	UFUNCTION(Exec)
+	void ZSRange();
+
 protected:
 	virtual void SetupInputComponent() override;
+	virtual void BeginPlay() override;
 
 private:
 	UPROPERTY(Transient)
@@ -72,4 +89,7 @@ private:
 	bool bShowMovementDebug = !UE_BUILD_SHIPPING;
 
 	void SaveSettings();
+
+	/** Dev-only automated screenshot run, driven by -ZSAutoShot=<seconds> on the command line (see .cpp). */
+	void StartAutoShotIfRequested();
 };

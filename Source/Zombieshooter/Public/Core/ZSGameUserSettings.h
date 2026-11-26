@@ -96,6 +96,17 @@ public:
 	UPROPERTY(config, BlueprintReadOnly, Category = "ZS|Input")
 	bool bToggleCrouch;
 
+	/** Controller aim assist (slowdown near targets, ADS snap, light tracking). Never applies to the mouse. */
+	UPROPERTY(config, BlueprintReadOnly, Category = "ZS|Controller")
+	bool bAimAssist;
+
+	/** 0 = off .. 1 = default .. 1.5 = strong. */
+	UPROPERTY(config, BlueprintReadOnly, Category = "ZS|Controller")
+	float AimAssistStrength;
+
+	UPROPERTY(config, BlueprintReadOnly, Category = "ZS|HUD")
+	bool bShowDamageNumbers;
+
 	// ---- Setters (clamped) -----------------------------------------------------------------
 
 	UFUNCTION(BlueprintCallable, Category = "ZS|Settings")

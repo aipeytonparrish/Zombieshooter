@@ -158,9 +158,9 @@ float UZSMovementComponent::GetMaxSpeed() const
 	case MOVE_NavWalking:
 		if (IsCrouching())
 		{
-			return CrouchSpeed;
+			return CrouchSpeed * ExternalSpeedScale;
 		}
-		return IsSprinting() ? SprintSpeed : JogSpeed;
+		return IsSprinting() ? SprintSpeed : JogSpeed * ExternalSpeedScale;
 
 	case MOVE_Falling:
 		return JogSpeed;

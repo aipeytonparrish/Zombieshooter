@@ -72,6 +72,7 @@ void UZSInputSet::Build()
 	Melee               = MakeAction(TEXT("IA_Melee"), EInputActionValueType::Boolean);
 	Lethal              = MakeAction(TEXT("IA_Lethal"), EInputActionValueType::Boolean);
 	Tactical            = MakeAction(TEXT("IA_Tactical"), EInputActionValueType::Boolean);
+	FireMode            = MakeAction(TEXT("IA_FireMode"), EInputActionValueType::Boolean);
 
 	Pause               = MakeAction(TEXT("IA_Pause"), EInputActionValueType::Boolean);
 	ToggleMovementDebug = MakeAction(TEXT("IA_ToggleMovementDebug"), EInputActionValueType::Boolean);
@@ -92,6 +93,7 @@ void UZSInputSet::Build()
 	MapKey(Melee,               EKeys::Gamepad_RightThumbstick);
 	MapKey(Lethal,              EKeys::Gamepad_RightShoulder);
 	MapKey(Tactical,            EKeys::Gamepad_DPad_Left);
+	MapKey(FireMode,            EKeys::Gamepad_DPad_Up);
 	MapKey(Pause,               EKeys::Gamepad_Special_Right);
 	MapKey(ToggleMovementDebug, EKeys::Gamepad_DPad_Down);
 
@@ -114,6 +116,7 @@ void UZSInputSet::Build()
 	MapKey(Melee,               EKeys::ThumbMouseButton);
 	MapKey(Lethal,              EKeys::G);
 	MapKey(Tactical,            EKeys::Q);
+	MapKey(FireMode,            EKeys::B);
 	MapKey(Pause,               EKeys::Escape);
 	MapKey(ToggleMovementDebug, EKeys::F3);
 }

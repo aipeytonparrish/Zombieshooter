@@ -61,6 +61,7 @@ public:
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "ZS|Input") TObjectPtr<UInputAction> Melee;
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "ZS|Input") TObjectPtr<UInputAction> Lethal;
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "ZS|Input") TObjectPtr<UInputAction> Tactical;
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "ZS|Input") TObjectPtr<UInputAction> FireMode;
 
 	// ---- Menus / debug ----
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "ZS|Input") TObjectPtr<UInputAction> Pause;

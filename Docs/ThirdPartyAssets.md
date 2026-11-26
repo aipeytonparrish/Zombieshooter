@@ -61,6 +61,13 @@ restored (see the bottom of this file) before maps that use them will look right
 - **FPS arms** (`SK_Arms_01–11`) are on the full UE5 Manny skeleton, so any Manny first-person animation drives
   them. **The packs contain no first-person weapon animations** — see the gaps list in `AssetRequests.md`.
 
+## 4b. Generated assets (`Content/ZS_Imported/`, git-ignored)
+
+Some packs are FBX-only, so scripts in `Tools/Import/` convert them into Unreal assets headlessly (no clicking):
+`powershell -ExecutionPolicy Bypass -File ToolsImportun_imports.ps1` (editor closed). Currently: the RD-704 rifle
+(`import_rd704.py` - static-mesh parts, PBR materials on `M_ZS_PBR_Master`, glowing Bravo4 reticle). Code references
+these paths and falls back to placeholders when they're missing.
+
 ## 5. Restoring the packs on a fresh clone / another PC
 
 1. Get the Desktop archives (zips/rars listed above).

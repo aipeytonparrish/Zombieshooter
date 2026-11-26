@@ -32,6 +32,13 @@ public:
 
 	virtual void GetCameraView(float DeltaTime, FMinimalViewInfo& DesiredView) override;
 
+	/** The bob / roll offset GetCameraView applies to the view, expressed in this component's local space.
+	 *  First-person view models apply it too so they stay locked to the view. */
+	FTransform GetViewFeelLocalTransform() const;
+
+	/** ADS zoom: final FOV = (settings FOV + kicks) * Multiplier. FOV kicks fade out while aiming. */
+	void SetADSFOVMultiplier(float Multiplier, float ADSAlpha);
+
 	// ---- Tuning ----
 
 	UPROPERTY(EditDefaultsOnly, Category = "ZS|Camera|HeadBob", meta = (ForceUnits = "cm"))
@@ -100,4 +107,7 @@ private:
 
 	/** Camera-space additive offset: Y = right, Z = up. */
 	FVector FeelOffset = FVector::ZeroVector;
+
+	float ADSFOVMultiplier = 1.f;
+	float ADSAlpha = 0.f;
 };

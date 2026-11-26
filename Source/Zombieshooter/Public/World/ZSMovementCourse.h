@@ -13,7 +13,7 @@ class UTextRenderComponent;
  * the world-grid material, so distances are readable (1 grid square = 1 m).
  *
  * Lanes (left to right, all running along +X from the actor):
- *   Dash gap | Mantle heights | Slide tunnel + slide ramp | Wall-run gap | Wall-run corridor | Double-jump tower
+ *   Dash gap | Mantle heights | Slide tunnel + slide ramp | Wall-run gap | Wall-run corridor | Double-jump tower | Shooting range
  */
 UCLASS()
 class ZOMBIESHOOTER_API AZSMovementCourse : public AActor
@@ -32,7 +32,13 @@ public:
 	UPROPERTY(EditAnywhere, Category = "ZS|Course")
 	TObjectPtr<UMaterialInterface> BlockMaterial;
 
+	/** Spawn the shooting-range target dummies (lane 7) when play starts. */
+	UPROPERTY(EditAnywhere, Category = "ZS|Course")
+	bool bSpawnTargets = true;
+
 protected:
+	virtual void BeginPlay() override;
+
 	UPROPERTY(VisibleAnywhere, Category = "ZS|Course")
 	TObjectPtr<USceneComponent> Root;
 
@@ -43,7 +49,7 @@ protected:
 	TArray<TObjectPtr<UTextRenderComponent>> Labels;
 
 private:
-	static constexpr int32 NumLabels = 6;
+	static constexpr int32 NumLabels = 7;
 
 	void Rebuild();
 

@@ -1,6 +1,7 @@
 #include "Core/ZSGameMode_Sandbox.h"
 #include "Player/ZSPlayerCharacter.h"
 #include "Player/ZSPlayerController.h"
+#include "UI/ZSHUD.h"
 #include "World/ZSMovementCourse.h"
 #include "GameFramework/PlayerStart.h"
 #include "Kismet/GameplayStatics.h"
@@ -11,6 +12,7 @@ AZSGameMode_Sandbox::AZSGameMode_Sandbox()
 {
 	DefaultPawnClass = AZSPlayerCharacter::StaticClass();
 	PlayerControllerClass = AZSPlayerController::StaticClass();
+	HUDClass = AZSHUD::StaticClass();
 }
 
 void AZSGameMode_Sandbox::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)

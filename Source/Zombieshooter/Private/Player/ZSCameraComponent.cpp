@@ -87,7 +87,7 @@ void UZSCameraComponent::UpdateFeel(float DeltaTime, const UZSMovementComponent*
 	CurrentRoll = FMath::FInterpTo(CurrentRoll, TargetRoll * EffectScale, DeltaTime, TiltInterpSpeed);
 	CurrentFOVKick = FMath::FInterpTo(CurrentFOVKick, TargetFOVKick * EffectScale, DeltaTime, FOVInterpSpeed);
 
-	SetFieldOfView(Settings->FieldOfView + CurrentFOVKick);
+	SetFieldOfView((Settings->FieldOfView + CurrentFOVKick * (1.f - ADSAlpha)) * ADSFOVMultiplier);
 }
 
 void UZSCameraComponent::GetCameraView(float DeltaTime, FMinimalViewInfo& DesiredView)
@@ -98,4 +98,18 @@ void UZSCameraComponent::GetCameraView(float DeltaTime, FMinimalViewInfo& Desire
 	const FRotator YawOnly(0.f, DesiredView.Rotation.Yaw, 0.f);
 	DesiredView.Location += YawOnly.RotateVector(FVector(0.f, FeelOffset.Y, 0.f)) + FVector(0.f, 0.f, FeelOffset.Z);
 	DesiredView.Rotation.Roll += CurrentRoll;
+}
+
+FTransform UZSCameraComponent::GetViewFeelLocalTransform() const
+{
+	const FRotator ViewRotation = GetComponentRotation();
+	const FRotator YawOnly(0.f, ViewRotation.Yaw, 0.f);
+	const FVector WorldOffset = YawOnly.RotateVector(FVector(0.f, FeelOffset.Y, 0.f)) + FVector(0.f, 0.f, FeelOffset.Z);
+	return FTransform(FRotator(0.f, 0.f, CurrentRoll), ViewRotation.UnrotateVector(WorldOffset));
+}
+
+void UZSCameraComponent::SetADSFOVMultiplier(float Multiplier, float InADSAlpha)
+{
+	ADSFOVMultiplier = FMath::Clamp(Multiplier, 0.2f, 1.f);
+	ADSAlpha = FMath::Clamp(InADSAlpha, 0.f, 1.f);
 }

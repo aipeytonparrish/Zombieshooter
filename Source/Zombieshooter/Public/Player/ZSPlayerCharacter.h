@@ -6,7 +6,8 @@
 
 class UZSCameraComponent;
 class UZSMovementComponent;
-class USkeletalMeshComponent;
+class UZSFirstPersonArmsComponent;
+class UZSWeaponComponent;
 struct FInputActionValue;
 
 /**
@@ -28,7 +29,16 @@ public:
 	UZSCameraComponent* GetFirstPersonCamera() const { return FirstPersonCamera; }
 
 	UFUNCTION(BlueprintPure, Category = "ZS|Player")
-	USkeletalMeshComponent* GetFirstPersonArms() const { return FirstPersonArms; }
+	UZSFirstPersonArmsComponent* GetFirstPersonArms() const { return FirstPersonArms; }
+
+	/** Scene component the held weapon is attached to (moved by the weapon component every frame). */
+	USceneComponent* GetViewModelRoot() const { return ViewModelRoot; }
+
+	UFUNCTION(BlueprintPure, Category = "ZS|Player")
+	UZSWeaponComponent* GetWeaponComponent() const { return WeaponComponent; }
+
+	/** Ends sprinting (toggle or held). Used when firing or aiming. */
+	void CancelSprint();
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
@@ -44,9 +54,15 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "ZS|Player")
 	TObjectPtr<UZSCameraComponent> FirstPersonCamera;
 
-	/** First-person arms, visible only to the owning player. Mesh assigned in BP_ZSPlayerCharacter (see Docs/AssetRequests.md). */
+	/** First-person arms (owner-only), posed by IK onto the held weapon. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "ZS|Player")
-	TObjectPtr<USkeletalMeshComponent> FirstPersonArms;
+	TObjectPtr<UZSFirstPersonArmsComponent> FirstPersonArms;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "ZS|Player")
+	TObjectPtr<USceneComponent> ViewModelRoot;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "ZS|Player")
+	TObjectPtr<UZSWeaponComponent> WeaponComponent;
 
 	// ---- Look tuning (controller) ----
 
@@ -92,6 +108,13 @@ private:
 	void Input_SprintKeyboardCompleted(const FInputActionValue& Value);
 	void Input_Dash(const FInputActionValue& Value);
 	void Input_ToggleMovementDebug(const FInputActionValue& Value);
+	void Input_FireStarted(const FInputActionValue& Value);
+	void Input_FireCompleted(const FInputActionValue& Value);
+	void Input_ADSStarted(const FInputActionValue& Value);
+	void Input_ADSCompleted(const FInputActionValue& Value);
+	void Input_Reload(const FInputActionValue& Value);
+	void Input_SwitchWeapon(const FInputActionValue& Value);
+	void Input_FireMode(const FInputActionValue& Value);
 
 	void StartSprint(bool bToggleMode);
 	void StopSprint(bool bToggleMode);

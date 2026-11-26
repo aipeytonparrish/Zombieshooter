@@ -140,5 +140,62 @@ Tell Claude what feels off (e.g. "slide too short", "wall-run drops too fast") a
 
 ### Known placeholders
 - No arms or weapon are visible yet (arms mesh slot exists: `FirstPersonArms`; see `Docs/AssetRequests.md`).
-- Weapon sway / inertia arrives with weapons in Milestone 3.
+- Weapon sway / inertia: done in Milestone 3.
 - `Escape` stops Play-In-Editor; it becomes the pause menu in a packaged build / later milestone. Use **Shift+F1** to free the mouse in PIE.
+
+---
+
+## Milestone 3 — Gunplay
+
+### Before the first Play (one time per PC)
+The rifle is built from the owner's RD-704 pack, which has to be converted into Unreal assets once:
+1. Close the editor.
+2. Run in PowerShell (from the project folder):
+   `powershell -ExecutionPolicy Bypass -File Tools\Import\run_imports.ps1`
+   (~1 minute; it creates `Content/ZS_Imported/`, which is git-ignored.)
+3. If you skip this the game still runs — the rifle just shows as grey placeholder boxes.
+
+The first-person arms come from the **AAA FPS Gloves** pack (`Content/AAA_FPS_Gloves/`). If that folder is missing
+(fresh clone), the guns still work but no arms are shown — restore the packs (`Docs/ThirdPartyAssets.md`).
+
+### Test it
+Use the quick-test command from Milestone 2 (or your `L_MovementTest` map), then type `ZSRange` in the console
+(` key) to jump to the **shooting range** (lane 7, far right of the course).
+
+| Action | Controller | Keyboard / mouse |
+|---|---|---|
+| Fire | RT | Left mouse |
+| Aim down sights | LT (hold) | Right mouse (hold) |
+| Reload | X | R |
+| Switch weapon (rifle / pistol) | Y | Mouse wheel |
+| Fire mode (auto / burst / semi) | D-pad Up | B |
+
+The range has targets at 10 / 20 / 35 / 50 m, one strafing target (aim-assist test), a 20 cm wall the rifle
+shoots through and a 60 cm wall it can't. Targets show their health, flash when hit, fall over at 0 and stand up
+again after 3 s. Headshots (the ball) do double damage.
+
+What you should feel:
+- **Recoil** climbs as you hold the trigger; pull down on the stick/mouse to fight it. When you let go, the view
+  settles most of the way back (not past where you aimed).
+- **Hip-fire spread** grows while moving / jumping / firing — the crosshair opens to show it. Aiming tightens it.
+- **Aim assist (controller only):** the stick slows down over a target, aiming in near a target snaps toward it,
+  and it gently follows a moving target while you move or look. It never moves your aim when you're idle.
+- **Reloads:** tactical (rounds left, faster, keeps one in the chamber: 31/30) vs empty (slower, racks the gun).
+  Firing cancels a tactical reload that hasn't inserted the mag yet.
+- Sprinting lowers the gun; pulling the trigger or aiming ends the sprint. Rumble on every shot, stronger on kills.
+
+### Console commands
+| Command | Effect |
+|---|---|
+| `ZSRange` | Teleport to the shooting range |
+| `ZSGiveAmmo` | Refill all weapons |
+| `ZSAimAssist 1` | Aim-assist strength (0 = off, 1 = default, 1.5 = strong) |
+| `ZSDamageNumbers 0` / `1` | Floating damage numbers off / on |
+| `zs.ShowImpacts 0` / `1` / `2` | Impact dots off / on / dots + tracers |
+
+### Known placeholders
+- No first-person animations exist yet, so the arms are **posed by code** (IK onto the grips) and reloads are a
+  procedural tilt + magazine drop. Real animations replace this when an FPS animation pack arrives.
+- The pistol is grey boxes (no pistol mesh supplied yet). No weapon sounds, muzzle-flash effect or shell casings yet
+  — only a muzzle light. See `Docs/AssetRequests.md`.
+- The RD-704's front sight post shows inside the scope (it's part of the receiver mesh).

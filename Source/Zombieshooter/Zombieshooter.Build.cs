@@ -24,7 +24,7 @@ public class Zombieshooter : ModuleRules
 			"StateTreeModule",
 			"GameplayStateTreeModule",
 			"Niagara",
-			"PhysicsCore"
+			"PhysicsCore", "AnimationCore"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]

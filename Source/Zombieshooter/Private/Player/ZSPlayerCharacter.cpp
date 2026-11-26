@@ -6,6 +6,8 @@
 #include "Core/ZSGameUserSettings.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Player/ZSFirstPersonArmsComponent.h"
+#include "Weapons/ZSWeaponComponent.h"
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
 #include "Engine/Engine.h"
@@ -34,12 +36,13 @@ AZSPlayerCharacter::AZSPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	FirstPersonCamera->SetupAttachment(GetCapsuleComponent());
 	FirstPersonCamera->SetRelativeLocation(FVector(0.f, 0.f, BaseEyeHeight));
 
-	FirstPersonArms = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FirstPersonArms"));
+	FirstPersonArms = CreateDefaultSubobject<UZSFirstPersonArmsComponent>(TEXT("FirstPersonArms"));
 	FirstPersonArms->SetupAttachment(FirstPersonCamera);
-	FirstPersonArms->SetOnlyOwnerSee(true);
-	FirstPersonArms->SetCastShadow(false);
-	FirstPersonArms->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	FirstPersonArms->SetRelativeLocation(FVector(0.f, 0.f, -150.f));
+
+	ViewModelRoot = CreateDefaultSubobject<USceneComponent>(TEXT("ViewModelRoot"));
+	ViewModelRoot->SetupAttachment(FirstPersonCamera);
+
+	WeaponComponent = CreateDefaultSubobject<UZSWeaponComponent>(TEXT("WeaponComponent"));
 
 	// Full body (outfit) is for shadows / mirrors / third person; the owner never sees it directly.
 	GetMesh()->SetOwnerNoSee(true);
@@ -182,6 +185,14 @@ void AZSPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	EIC->BindAction(Set->SprintKeyboard, ETriggerEvent::Completed, this, &ThisClass::Input_SprintKeyboardCompleted);
 	EIC->BindAction(Set->Dash, ETriggerEvent::Started, this, &ThisClass::Input_Dash);
 	EIC->BindAction(Set->ToggleMovementDebug, ETriggerEvent::Started, this, &ThisClass::Input_ToggleMovementDebug);
+
+	EIC->BindAction(Set->Fire, ETriggerEvent::Started, this, &ThisClass::Input_FireStarted);
+	EIC->BindAction(Set->Fire, ETriggerEvent::Completed, this, &ThisClass::Input_FireCompleted);
+	EIC->BindAction(Set->AimDownSights, ETriggerEvent::Started, this, &ThisClass::Input_ADSStarted);
+	EIC->BindAction(Set->AimDownSights, ETriggerEvent::Completed, this, &ThisClass::Input_ADSCompleted);
+	EIC->BindAction(Set->Reload, ETriggerEvent::Started, this, &ThisClass::Input_Reload);
+	EIC->BindAction(Set->SwitchWeapon, ETriggerEvent::Started, this, &ThisClass::Input_SwitchWeapon);
+	EIC->BindAction(Set->FireMode, ETriggerEvent::Started, this, &ThisClass::Input_FireMode);
 }
 
 FVector2D AZSPlayerCharacter::ApplyRadialDeadZone(const FVector2D& Raw, float Inner, float Outer)
@@ -222,7 +233,7 @@ void AZSPlayerCharacter::Input_LookMouse(const FInputActionValue& Value)
 {
 	const UZSGameUserSettings* Settings = UZSGameUserSettings::Get();
 	const FVector2D Delta = Value.Get<FVector2D>();
-	const float Scale = MouseDegreesPerCount * Settings->MouseSensitivity;
+	const float Scale = MouseDegreesPerCount * Settings->MouseSensitivity * (WeaponComponent ? WeaponComponent->GetLookInputScale(false) : 1.f);
 	const float InvertY = Settings->bInvertMouseY ? -1.f : 1.f;
 
 	AddControllerYawInput(Delta.X * Scale);
@@ -250,7 +261,7 @@ void AZSPlayerCharacter::Input_LookGamepad(const FInputActionValue& Value)
 	// Response curve on the magnitude keeps the direction exact while giving fine control near centre.
 	const FVector2D Direction = Stick / Magnitude;
 	const float Curved = FMath::Pow(Magnitude, Settings->GamepadResponseExponent);
-	const float Sensitivity = Settings->GamepadLookSensitivity;
+	const float Sensitivity = Settings->GamepadLookSensitivity * (WeaponComponent ? WeaponComponent->GetLookInputScale(true) : 1.f);
 	const float InvertY = Settings->bInvertGamepadY ? -1.f : 1.f;
 
 	float YawRate = Direction.X * Curved * GamepadYawRate * Sensitivity;
@@ -375,6 +386,23 @@ void AZSPlayerCharacter::Input_ToggleMovementDebug(const FInputActionValue& Valu
 		PC->ToggleMovementDebug();
 	}
 }
+
+void AZSPlayerCharacter::CancelSprint()
+{
+	bSprintToggled = false;
+	if (UZSMovementComponent* Move = GetZSMovement())
+	{
+		Move->SetSprintInput(false);
+	}
+}
+
+void AZSPlayerCharacter::Input_FireStarted(const FInputActionValue& Value) { if (WeaponComponent) { WeaponComponent->SetTriggerHeld(true); } }
+void AZSPlayerCharacter::Input_FireCompleted(const FInputActionValue& Value) { if (WeaponComponent) { WeaponComponent->SetTriggerHeld(false); } }
+void AZSPlayerCharacter::Input_ADSStarted(const FInputActionValue& Value) { if (WeaponComponent) { WeaponComponent->SetADSHeld(true); } }
+void AZSPlayerCharacter::Input_ADSCompleted(const FInputActionValue& Value) { if (WeaponComponent) { WeaponComponent->SetADSHeld(false); } }
+void AZSPlayerCharacter::Input_Reload(const FInputActionValue& Value) { if (WeaponComponent) { WeaponComponent->RequestReload(); } }
+void AZSPlayerCharacter::Input_SwitchWeapon(const FInputActionValue& Value) { if (WeaponComponent) { WeaponComponent->RequestSwitchWeapon(); } }
+void AZSPlayerCharacter::Input_FireMode(const FInputActionValue& Value) { if (WeaponComponent) { WeaponComponent->RequestCycleFireMode(); } }
 
 // =============================================================================================
 // Debug

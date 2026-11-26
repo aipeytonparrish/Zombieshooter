@@ -9,6 +9,7 @@
 #include "Player/ZSFirstPersonArmsComponent.h"
 #include "Weapons/ZSWeaponComponent.h"
 #include "Combat/ZSHealthComponent.h"
+#include "Engine/SkeletalMesh.h"
 #include "GameFramework/GameModeBase.h"
 #include "TimerManager.h"
 #include "EnhancedInputComponent.h"
@@ -45,6 +46,15 @@ AZSPlayerCharacter::AZSPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	ViewModelRoot = CreateDefaultSubobject<USceneComponent>(TEXT("ViewModelRoot"));
 	ViewModelRoot->SetupAttachment(FirstPersonCamera);
 
+	AnimatedArms = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("AnimatedArms"));
+	AnimatedArms->SetupAttachment(ViewModelRoot);
+	AnimatedArms->SetOnlyOwnerSee(true);
+	AnimatedArms->SetCastShadow(false);
+	AnimatedArms->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	AnimatedArms->SetVisibility(false);
+	AnimatedArms->bUseAttachParentBound = false;
+	AnimatedArms->SetBoundsScale(4.f);
+
 	WeaponComponent = CreateDefaultSubobject<UZSWeaponComponent>(TEXT("WeaponComponent"));
 
 	HealthComponent = CreateDefaultSubobject<UZSHealthComponent>(TEXT("Health"));
@@ -66,6 +76,11 @@ void AZSPlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	CurrentEyeHeight = BaseEyeHeight;
+	// Same gloved arms mesh as the code-posed arms; used with animated weapons.
+	if (USkeletalMesh* ArmsMesh = FirstPersonArms->ArmsMesh.LoadSynchronous())
+	{
+		AnimatedArms->SetSkeletalMeshAsset(ArmsMesh);
+	}
 	HealthComponent->OnDamaged.AddDynamic(this, &ThisClass::HandleDamaged);
 	HealthComponent->OnDeath.AddDynamic(this, &ThisClass::HandleDeath);
 }

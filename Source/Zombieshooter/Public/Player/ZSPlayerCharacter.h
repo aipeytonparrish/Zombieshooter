@@ -32,6 +32,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "ZS|Player")
 	UZSFirstPersonArmsComponent* GetFirstPersonArms() const { return FirstPersonArms; }
 
+	/** Gloved arms that copy the pose of an animated weapon rig (leader pose). */
+	USkeletalMeshComponent* GetAnimatedArms() const { return AnimatedArms; }
+
 	/** Scene component the held weapon is attached to (moved by the weapon component every frame). */
 	USceneComponent* GetViewModelRoot() const { return ViewModelRoot; }
 
@@ -64,6 +67,9 @@ protected:
 	/** First-person arms (owner-only), posed by IK onto the held weapon. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "ZS|Player")
 	TObjectPtr<UZSFirstPersonArmsComponent> FirstPersonArms;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "ZS|Player")
+	TObjectPtr<USkeletalMeshComponent> AnimatedArms;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "ZS|Player")
 	TObjectPtr<USceneComponent> ViewModelRoot;

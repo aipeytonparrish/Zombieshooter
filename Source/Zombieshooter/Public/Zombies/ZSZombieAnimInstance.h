@@ -1,32 +1,10 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Animation/AnimInstance.h"
-#include "Animation/AnimInstanceProxy.h"
+#include "Animation/ZSLayeredAnimInstance.h"
 #include "ZSZombieAnimInstance.generated.h"
 
 class UAnimSequence;
-
-/** One sampled animation and its blend weight, copied to the worker thread each frame. */
-struct FZSAnimLayerSample
-{
-	const UAnimSequence* Anim = nullptr;
-	float Time = 0.f;
-	float Weight = 0.f;
-	bool bLoop = true;
-};
-
-/** Worker-thread side: samples the layers and blends them. No Anim Blueprint graph is involved. */
-struct FZSZombieAnimProxy : public FAnimInstanceProxy
-{
-	FZSZombieAnimProxy() = default;
-	explicit FZSZombieAnimProxy(UAnimInstance* Instance) : FAnimInstanceProxy(Instance) {}
-
-	virtual void PreUpdate(UAnimInstance* InAnimInstance, float DeltaSeconds) override;
-	virtual bool Evaluate(FPoseContext& Output) override;
-
-	TArray<FZSAnimLayerSample, TInlineAllocator<5>> Layers;
-};
 
 /**
  * Code-driven zombie animation: idle / walk / run locomotion blended by speed (play rate matched to the
@@ -34,7 +12,7 @@ struct FZSZombieAnimProxy : public FAnimInstanceProxy
  * over locomotion and back out. Works directly with the owner's per-zombie animation sets.
  */
 UCLASS(Transient, NotBlueprintable)
-class ZOMBIESHOOTER_API UZSZombieAnimInstance : public UAnimInstance
+class ZOMBIESHOOTER_API UZSZombieAnimInstance : public UZSLayeredAnimInstance
 {
 	GENERATED_BODY()
 
@@ -55,12 +33,9 @@ public:
 	/** Freeze everything (used the moment ragdoll takes over). */
 	void Freeze() { bFrozen = true; }
 
-	// Read by the proxy on the game thread in PreUpdate.
-	void GatherLayers(TArray<FZSAnimLayerSample, TInlineAllocator<5>>& Out) const;
+	virtual void GatherLayers(FZSAnimLayerArray& Out) const override;
 
 protected:
-	virtual FAnimInstanceProxy* CreateAnimInstanceProxy() override;
-	virtual void DestroyAnimInstanceProxy(FAnimInstanceProxy* InProxy) override;
 	virtual void NativeUpdateAnimation(float DeltaSeconds) override;
 
 private:

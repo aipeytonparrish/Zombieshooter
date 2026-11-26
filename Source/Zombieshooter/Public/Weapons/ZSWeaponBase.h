@@ -3,11 +3,38 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Weapons/ZSWeaponTypes.h"
+#include "Weapons/ZSFPAnimInstance.h"
 #include "ZSWeaponBase.generated.h"
 
 class UStaticMeshComponent;
 class UPointLightComponent;
 class USoundBase;
+class USkeletalMeshComponent;
+class UZSFPAnimInstance;
+class UAnimSequence;
+
+/** The animation set after loading (raw pointers; kept alive by AZSWeaponBase::KeepAlive). */
+struct FZSLoadedAnimSet
+{
+	UAnimSequence* Fire = nullptr;
+	UAnimSequence* FireAimed = nullptr;
+	UAnimSequence* Reload = nullptr;
+	UAnimSequence* ReloadEmpty = nullptr;
+	UAnimSequence* Equip = nullptr;
+	UAnimSequence* Holster = nullptr;
+	UAnimSequence* WeaponFire = nullptr;
+	UAnimSequence* WeaponReload = nullptr;
+	UAnimSequence* WeaponReloadEmpty = nullptr;
+	const class UAnimMontage* ReloadSoundMontage = nullptr;
+	const class UAnimMontage* ReloadEmptySoundMontage = nullptr;
+	TArray<USoundBase*> FireSounds;
+	USoundBase* FireTail = nullptr;
+	USoundBase* DryFire = nullptr;
+	USoundBase* EquipSound = nullptr;
+	class UNiagaraSystem* MuzzleFlash = nullptr;
+	TArray<FZSActionSound> ReloadSounds;
+	TArray<FZSActionSound> ReloadEmptySounds;
+};
 
 /**
  * A weapon: its stats, ammo and first-person visuals. Firing, recoil, ADS and aim assist live in
@@ -26,6 +53,26 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ZS|Weapon")
 	FZSWeaponStats Stats;
+
+	/** Real first-person animation (used when its assets are present; see FZSWeaponAnimSet). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ZS|Weapon")
+	FZSWeaponAnimSet AnimSet;
+
+	/** True when the animated rig loaded; false = code-posed arms + Stats.Parts. */
+	bool IsAnimated() const { return bAnimated; }
+	USkeletalMeshComponent* GetDriverMesh() const { return DriverMesh; }
+	USkeletalMeshComponent* GetWeaponMesh() const { return WeaponMesh; }
+	UZSFPAnimInstance* GetArmsAnim() const;
+	UZSFPAnimInstance* GetWeaponAnim() const;
+	const FZSLoadedAnimSet& GetLoadedAnims() const { return Loaded; }
+
+	/** Animated mode: keep the camera socket on the camera (call after the pose updates). */
+	void UpdateDriverPlacement();
+
+	/** Fire sound (random variation) + weapon fire clip + muzzle flash. */
+	void PlayShotEffects(bool bAimed);
+	void PlayFireTail();
+	void PlayDryFire();
 
 	// ---- Optional sounds (owner-provided assets later; silent when unset) ----
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ZS|Weapon|Audio")
@@ -79,6 +126,15 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "ZS|Weapon")
 	TObjectPtr<UPointLightComponent> MuzzleLight;
 
+	UPROPERTY(VisibleAnywhere, Category = "ZS|Weapon")
+	TObjectPtr<USkeletalMeshComponent> DriverMesh;
+
+	UPROPERTY(VisibleAnywhere, Category = "ZS|Weapon")
+	TObjectPtr<USkeletalMeshComponent> WeaponMesh;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UObject>> KeepAlive;
+
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UStaticMeshComponent>> PartComponents;
 
@@ -92,6 +148,10 @@ protected:
 
 private:
 	void BuildVisuals();
+	bool TryBuildAnimated();
+
+	FZSLoadedAnimSet Loaded;
+	bool bAnimated = false;
 
 	TArray<FTransform> MagazineBaseTransforms;
 

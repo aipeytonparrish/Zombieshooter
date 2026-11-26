@@ -1,6 +1,11 @@
 #include "Weapons/ZSWeaponComponent.h"
 #include "Weapons/ZSWeaponBase.h"
 #include "Weapons/ZSWeapon_RD704.h"
+#include "Weapons/ZSWeapon_TacticalAR.h"
+#include "Weapons/ZSFPAnimInstance.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
+#include "Animation/AnimSequence.h"
 #include "Weapons/ZSWeapon_Pistol.h"
 #include "Player/ZSPlayerCharacter.h"
 #include "Player/ZSCameraComponent.h"
@@ -49,8 +54,9 @@ UZSWeaponComponent::UZSWeaponComponent()
 	// After the character's own tick (movement input, camera feel) so the view model uses this frame's camera.
 	PrimaryComponentTick.TickGroup = TG_PostPhysics;
 
-	DefaultWeapons.Add(AZSWeapon_RD704::StaticClass());
+	DefaultWeapons.Add(AZSWeapon_TacticalAR::StaticClass());
 	DefaultWeapons.Add(AZSWeapon_Pistol::StaticClass());
+	DefaultWeapons.Add(AZSWeapon_RD704::StaticClass());
 }
 
 AZSPlayerCharacter* UZSWeaponComponent::GetCharacter() const
@@ -81,6 +87,7 @@ void UZSWeaponComponent::BeginPlay()
 	{
 		ViewModelRoot = Char->GetViewModelRoot();
 		Arms = Char->GetFirstPersonArms();
+		AnimatedArms = Char->GetAnimatedArms();
 	}
 	SpawnDefaultWeapons();
 }
@@ -146,9 +153,23 @@ void UZSWeaponComponent::EquipIndex(int32 Index, bool bInstant)
 	AZSWeaponBase* W = Weapons[Index];
 	W->SetWeaponVisible(true);
 
+	SetupArmsFor(W);
+
 	State = EZSWeaponState::Equipping;
 	StateTime = 0.f;
 	StateDuration = bInstant ? 0.01f : W->Stats.EquipTime;
+	if (W->IsAnimated() && !bInstant)
+	{
+		const FZSLoadedAnimSet& L = W->GetLoadedAnims();
+		if (UZSFPAnimInstance* ArmsAnim = W->GetArmsAnim(); ArmsAnim && L.Equip)
+		{
+			ArmsAnim->PlayAction(L.Equip, L.Equip->GetPlayLength() / FMath::Max(StateDuration, 0.1f), 0.01f, 0.2f);
+		}
+		if (L.EquipSound)
+		{
+			UGameplayStatics::PlaySound2D(this, L.EquipSound);
+		}
+	}
 	EquipAlpha = 0.f;
 	Bloom = 0.f;
 	ShotsInSequence = 0;
@@ -223,6 +244,14 @@ void UZSWeaponComponent::RequestSwitchWeapon()
 	StateTime = 0.f;
 	const AZSWeaponBase* W = GetCurrentWeapon();
 	StateDuration = W ? W->Stats.UnequipTime : 0.2f;
+	if (W && W->IsAnimated())
+	{
+		const FZSLoadedAnimSet& L = W->GetLoadedAnims();
+		if (UZSFPAnimInstance* ArmsAnim = W->GetArmsAnim(); ArmsAnim && L.Holster)
+		{
+			ArmsAnim->PlayAction(L.Holster, L.Holster->GetPlayLength() / FMath::Max(StateDuration, 0.1f), 0.05f, 0.05f);
+		}
+	}
 }
 
 void UZSWeaponComponent::RequestCycleFireMode()
@@ -367,6 +396,7 @@ void UZSWeaponComponent::UpdateStateMachine(float DeltaTime)
 		{
 			State = EZSWeaponState::Idle;
 			W->SetMagazineOffset(FVector::ZeroVector, FRotator::ZeroRotator);
+			if (UZSFPAnimInstance* G = W->GetWeaponAnim()) { G->StopAction(0.1f); }
 		}
 		break;
 
@@ -406,6 +436,27 @@ void UZSWeaponComponent::BeginReload()
 	StateTime = 0.f;
 	StateDuration = bReloadWasEmpty ? W->Stats.EmptyReloadTime : W->Stats.TacticalReloadTime;
 	BurstRemaining = 0;
+	if (W->IsAnimated())
+	{
+		const FZSLoadedAnimSet& L = W->GetLoadedAnims();
+		UAnimSequence* ArmsClip = bReloadWasEmpty && L.ReloadEmpty ? L.ReloadEmpty : L.Reload;
+		UAnimSequence* GunClip = bReloadWasEmpty && L.WeaponReloadEmpty ? L.WeaponReloadEmpty : L.WeaponReload;
+		const UAnimMontage* SoundSource = bReloadWasEmpty && L.ReloadEmptySoundMontage ? L.ReloadEmptySoundMontage : L.ReloadSoundMontage;
+		const TArray<FZSActionSound>& Timed = bReloadWasEmpty ? L.ReloadEmptySounds : L.ReloadSounds;
+		if (ArmsClip)
+		{
+			// Play the pack clip at whatever rate fits the weapon's reload time.
+			const float Rate = ArmsClip->GetPlayLength() / FMath::Max(StateDuration, 0.1f);
+			if (UZSFPAnimInstance* ArmsAnim = W->GetArmsAnim())
+			{
+				ArmsAnim->PlayAction(ArmsClip, Rate, 0.12f, 0.25f, nullptr, &Timed);
+			}
+			if (UZSFPAnimInstance* GunAnim = W->GetWeaponAnim())
+			{
+				GunAnim->PlayAction(GunClip, Rate, 0.05f, 0.2f, SoundSource);
+			}
+		}
+	}
 	if (W->ReloadSound)
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, W->ReloadSound, W->GetActorLocation());
@@ -419,6 +470,11 @@ void UZSWeaponComponent::CancelReload()
 		State = EZSWeaponState::Idle;
 		if (AZSWeaponBase* W = GetCurrentWeapon())
 		{
+			if (W->IsAnimated())
+			{
+				if (UZSFPAnimInstance* A = W->GetArmsAnim()) { A->StopAction(0.15f); }
+				if (UZSFPAnimInstance* G = W->GetWeaponAnim()) { G->StopAction(0.1f); }
+			}
 			W->SetMagazineOffset(FVector::ZeroVector, FRotator::ZeroRotator);
 		}
 	}
@@ -492,6 +548,12 @@ void UZSWeaponComponent::UpdateFiring(float DeltaTime)
 		}
 	}
 
+	if (bTailPending && TimeSinceLastShot > W->Stats.GetShotInterval() * 1.6f)
+	{
+		bTailPending = false;
+		W->PlayFireTail();
+	}
+
 	if (TimeSinceLastShot > FMath::Max(W->Stats.GetShotInterval() * 2.5f, 0.25f))
 	{
 		ShotsInSequence = 0;
@@ -547,10 +609,7 @@ void UZSWeaponComponent::UpdateFiring(float DeltaTime)
 		if (!bDryFired)
 		{
 			bDryFired = true;
-			if (W->DryFireSound)
-			{
-				UGameplayStatics::PlaySoundAtLocation(this, W->DryFireSound, W->GetActorLocation());
-			}
+			W->PlayDryFire();
 			BeginReload();
 		}
 		bFireQueued = false;
@@ -606,7 +665,19 @@ void UZSWeaponComponent::FireShot()
 	KickPitchVel += S.VisualKickPitch * 60.f * FMath::Lerp(1.f, 0.4f, ADSAlpha);
 
 	W->PlayMuzzleFlash();
-	if (W->FireSound)
+	if (W->IsAnimated())
+	{
+		const bool bAimed = ADSAlpha > 0.5f;
+		W->PlayShotEffects(bAimed);
+		const FZSLoadedAnimSet& L = W->GetLoadedAnims();
+		if (UZSFPAnimInstance* ArmsAnim = W->GetArmsAnim())
+		{
+			UAnimSequence* FireAnim = bAimed && L.FireAimed ? L.FireAimed : L.Fire;
+			ArmsAnim->PlayAction(FireAnim, 1.f, 0.025f, 0.18f);
+		}
+		bTailPending = true;
+	}
+	else if (W->FireSound)
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, W->FireSound, W->GetMuzzleWorldLocation());
 	}
@@ -932,6 +1003,11 @@ void UZSWeaponComponent::UpdateViewModel(float DeltaTime, const FRotator& Player
 	{
 		return;
 	}
+	if (W->IsAnimated())
+	{
+		UpdateAnimatedViewModel(DeltaTime, PlayerLookDelta);
+		return;
+	}
 	const FZSWeaponStats& S = W->Stats;
 	const float AdsEase = EaseInOut(ADSAlpha);
 	const UZSGameUserSettings* Settings = UZSGameUserSettings::Get();
@@ -1058,5 +1134,84 @@ void UZSWeaponComponent::Rumble(float Intensity, float Duration) const
 	if (APlayerController* PC = GetPC())
 	{
 		PC->PlayDynamicForceFeedback(Intensity, Duration, true, true, true, true);
+	}
+}
+
+// ---- Animated weapons -----------------------------------------------------------------------
+
+void UZSWeaponComponent::SetupArmsFor(AZSWeaponBase* Weapon)
+{
+	const bool bAnimated = Weapon && Weapon->IsAnimated();
+	if (AnimatedArms)
+	{
+		if (bAnimated)
+		{
+			if (!AnimatedArms->GetSkinnedAsset() && Arms)
+			{
+				AnimatedArms->SetSkeletalMeshAsset(Arms->ArmsMesh.LoadSynchronous());
+			}
+			// Same component transform as the driver, bones copied by name every frame.
+			AnimatedArms->AttachToComponent(Weapon->GetDriverMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+			AnimatedArms->SetLeaderPoseComponent(Weapon->GetDriverMesh());
+			AnimatedArms->SetVisibility(AnimatedArms->GetSkinnedAsset() != nullptr);
+		}
+		else
+		{
+			AnimatedArms->SetLeaderPoseComponent(nullptr);
+			AnimatedArms->SetVisibility(false);
+		}
+	}
+	if (Arms)
+	{
+		Arms->SetVisibility(!bAnimated && Arms->HasArms());
+	}
+}
+
+void UZSWeaponComponent::UpdateAnimatedViewModel(float DeltaTime, const FRotator& PlayerLookDelta)
+{
+	AZSWeaponBase* W = GetCurrentWeapon();
+	AZSPlayerCharacter* Char = GetCharacter();
+	const FZSWeaponStats& S = W->Stats;
+	const float AdsEase = EaseInOut(ADSAlpha);
+	const float Comfort = FMath::Clamp(UZSGameUserSettings::Get()->CameraEffectsScale, 0.f, 1.f);
+
+	// Drive the clips.
+	const UZSMovementComponent* Move = Char->GetZSMovement();
+	const bool bGrounded = Move && Move->IsMovingOnGround() && !Move->IsSliding();
+	const float Speed01 = bGrounded ? Move->Velocity.Size2D() / FMath::Max(Move->JogSpeed, 1.f) : 0.f;
+	if (UZSFPAnimInstance* ArmsAnim = W->GetArmsAnim())
+	{
+		ArmsAnim->SetLocomotionState(Speed01, SprintAlpha, AdsEase);
+	}
+
+	// The clips handle hip / aim / sprint / reload poses; code only adds look sway, a little kick and the mantle dip.
+	FVector Loc = FVector::ZeroVector;
+	FRotator Rot = FRotator::ZeroRotator;
+
+	const float YawRate = PlayerLookDelta.Yaw / DeltaTime;
+	const float PitchRate = PlayerLookDelta.Pitch / DeltaTime;
+	const float SwayScale = S.SwayScale * FMath::Lerp(1.f, 0.15f, AdsEase) * Comfort;
+	const FRotator SwayTarget(
+		FMath::Clamp(-PitchRate * SwayPerDegPerSec, -SwayMax, SwayMax) * SwayScale,
+		FMath::Clamp(-YawRate * SwayPerDegPerSec, -SwayMax, SwayMax) * SwayScale,
+		FMath::Clamp(-YawRate * SwayPerDegPerSec * 0.6f, -SwayMax, SwayMax) * SwayScale);
+	SwayRotation = FMath::RInterpTo(SwayRotation, SwayTarget, DeltaTime, SwayInterpSpeed);
+	Rot += SwayRotation;
+
+	Loc += FVector(-6.f, 0.f, -18.f) * LowerAlpha;
+	Rot.Pitch -= 35.f * LowerAlpha;
+
+	SpringStep(KickBack, KickBackVel, 380.f, 24.f, DeltaTime);
+	SpringStep(KickPitch, KickPitchVel, 300.f, 20.f, DeltaTime);
+	Loc.X -= KickBack;
+	Rot.Pitch += KickPitch;
+
+	const FTransform Feel = Char->GetFirstPersonCamera()->GetViewFeelLocalTransform();
+	ViewModelRoot->SetRelativeTransform(FTransform(Rot, Loc) * Feel);
+
+	W->UpdateDriverPlacement();
+	if (AnimatedArms)
+	{
+		AnimatedArms->SetVisibility(!W->IsHidden() && AnimatedArms->GetSkinnedAsset() != nullptr);
 	}
 }

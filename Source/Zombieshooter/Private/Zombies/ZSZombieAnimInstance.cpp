@@ -1,68 +1,6 @@
 #include "Zombies/ZSZombieAnimInstance.h"
 #include "Animation/AnimSequence.h"
-#include "Animation/AnimNodeBase.h"
-#include "AnimationRuntime.h"
 #include "GameFramework/Pawn.h"
-
-// ---- Proxy (worker thread) ------------------------------------------------------------------
-
-void FZSZombieAnimProxy::PreUpdate(UAnimInstance* InAnimInstance, float DeltaSeconds)
-{
-	FAnimInstanceProxy::PreUpdate(InAnimInstance, DeltaSeconds);
-	Layers.Reset();
-	if (const UZSZombieAnimInstance* Zombie = Cast<UZSZombieAnimInstance>(InAnimInstance))
-	{
-		Zombie->GatherLayers(Layers);
-	}
-}
-
-bool FZSZombieAnimProxy::Evaluate(FPoseContext& Output)
-{
-	float Accumulated = 0.f;
-	for (const FZSAnimLayerSample& L : Layers)
-	{
-		if (!L.Anim || L.Weight <= KINDA_SMALL_NUMBER)
-		{
-			continue;
-		}
-
-		const FAnimExtractContext Ctx(static_cast<double>(L.Time), false, FDeltaTimeRecord(), L.bLoop);
-		if (Accumulated <= 0.f)
-		{
-			FAnimationPoseData OutData(Output);
-			L.Anim->GetAnimationPose(OutData, Ctx);
-			Accumulated = L.Weight;
-		}
-		else
-		{
-			FPoseContext Temp(Output);
-			FAnimationPoseData TempData(Temp);
-			L.Anim->GetAnimationPose(TempData, Ctx);
-			FAnimationPoseData OutData(Output);
-			const float Total = Accumulated + L.Weight;
-			FAnimationRuntime::BlendTwoPosesTogetherInPlace(OutData, TempData, Accumulated / Total);
-			Accumulated = Total;
-		}
-	}
-
-	if (Accumulated <= 0.f)
-	{
-		Output.ResetToRefPose();
-	}
-	return true;
-}
-
-// ---- Instance (game thread) -----------------------------------------------------------------
-
-FAnimInstanceProxy* UZSZombieAnimInstance::CreateAnimInstanceProxy()
-{
-	return new FZSZombieAnimProxy(this);
-}
-
-void UZSZombieAnimInstance::DestroyAnimInstanceProxy(FAnimInstanceProxy* InProxy)
-{
-	delete InProxy;
-}
 
 void UZSZombieAnimInstance::SetLocomotion(UAnimSequence* InIdle, UAnimSequence* InWalk, UAnimSequence* InRun, float InWalkSpeed, float InRunSpeed)
 {
@@ -179,22 +117,12 @@ void UZSZombieAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	}
 }
 
-void UZSZombieAnimInstance::GatherLayers(TArray<FZSAnimLayerSample, TInlineAllocator<5>>& Out) const
+void UZSZombieAnimInstance::GatherLayers(FZSAnimLayerArray& Out) const
 {
 	const float LocoScale = 1.f - ActionWeight;
 	const float Sum = FMath::Max(IdleWeight + WalkWeight + RunWeight, KINDA_SMALL_NUMBER);
 
-	auto Add = [&Out](const UAnimSequence* Anim, float Time, float Weight, bool bLoop)
-	{
-		if (Anim && Weight > 0.001f)
-		{
-			FZSAnimLayerSample& S = Out.AddDefaulted_GetRef();
-			S.Anim = Anim;
-			S.Time = bLoop ? FMath::Fmod(Time, FMath::Max(Anim->GetPlayLength(), 0.01f)) : FMath::Min(Time, Anim->GetPlayLength());
-			S.Weight = Weight;
-			S.bLoop = bLoop;
-		}
-	};
+	auto Add = [&Out](const UAnimSequence* Anim, float Time, float Weight, bool bLoop) { AddLayer(Out, Anim, Time, Weight, bLoop); };
 
 	Add(Idle, IdleTime, LocoScale * IdleWeight / Sum, true);
 	Add(Walk, WalkTime, LocoScale * WalkWeight / Sum, true);

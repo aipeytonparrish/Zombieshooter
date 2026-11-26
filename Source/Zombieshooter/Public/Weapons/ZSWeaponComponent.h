@@ -134,6 +134,9 @@ private:
 	// ---- Setup ----
 	void SpawnDefaultWeapons();
 	void EquipIndex(int32 Index, bool bInstant);
+	/** Animated weapons: show the follower arms on the weapon's driver rig; otherwise the code-posed arms. */
+	void SetupArmsFor(AZSWeaponBase* Weapon);
+	void UpdateAnimatedViewModel(float DeltaTime, const FRotator& PlayerLookDelta);
 
 	// ---- Firing ----
 	bool CanFireNow() const;
@@ -168,6 +171,9 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UZSFirstPersonArmsComponent> Arms;
 
+	UPROPERTY(Transient)
+	TObjectPtr<USkeletalMeshComponent> AnimatedArms;
+
 	int32 CurrentIndex = INDEX_NONE;
 	int32 PendingIndex = INDEX_NONE;
 	EZSWeaponState State = EZSWeaponState::Idle;
@@ -184,6 +190,7 @@ private:
 	float TimeSinceLastShot = 10.f;
 	int32 ShotsInSequence = 0;
 	bool bDryFired = false;
+	bool bTailPending = false;
 	float EmptyTime = 0.f;
 
 	// ADS

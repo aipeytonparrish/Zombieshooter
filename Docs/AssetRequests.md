@@ -49,6 +49,9 @@ source, modular RD-704 AK with attachments, first-person M249 animations, muzzle
 types, 5 survivor characters, masks/bandanas, hair cards.
 
 ### Biggest gaps right now (in priority order)
+> **Done:** first-person animations + gun sounds + muzzle flash are wired in (InfimaGames rifle, ProFPS pistol). Remaining
+> gaps: **zombie sounds**, **blood VFX**, **UI hit-marker / kill sound**, SMG first-person animations.
+>
 > **Update (later the same day):** the owner added Fab packs that cover gaps 1–3 — InfimaGames + ProFPS first-person
 > animations (rifle, pistol, knife, grenade), pistol / SMG meshes, and three big gun-sound libraries. They get wired in
 > as an M3 upgrade pass. See `Docs/ThirdPartyAssets.md` section 6. Still missing: zombie sounds, blood VFX, UI hit sounds.

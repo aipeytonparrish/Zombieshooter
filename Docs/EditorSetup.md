@@ -236,3 +236,20 @@ In Play, open the console (`) and type:
 ### Known placeholders
 - Basic blood only (code droplets + decal). Niagara blood spray, screen blood and dismemberment come in Milestone 11.
 - No zombie sounds yet (none supplied). The new Mocap_Zombie / Hitreact packs add variety in Milestone 11.
+
+---
+
+## Gunplay upgrade — real first-person animations (after Milestone 4)
+
+The guns now use the owner's Fab packs when they are installed:
+- **M4 Tactical (slot 1)** — InfimaGames *Tactical FPS Animations*: idle / walk / sprint, iron-sight aim pose, semi + aimed
+  fire, tactical + empty reloads with the pack's own reload sounds, quick equip / holster, AR gunshot + tail, muzzle flash.
+- **P9 Sidearm (slot 2)** — ProFPS *Pistol V2*: idle / walk / sprint, ADS, fire, tactical + empty reloads (slide lock),
+  draw / holster; RealWeaponSoundFX pistol shots (5 variations) with timed mag-out / mag-in / slide sounds.
+- **RD-704 (slot 3)** — the owner's modular AK, still code-posed (no animation pack for it).
+
+Y / mouse wheel cycles the three. Your gloved arms (AAA FPS Gloves) copy the animated pose, so outfits still swap arms.
+If a pack is missing on a PC, that gun falls back to grey placeholder boxes with code-posed arms — the game still runs.
+
+Known: the InfimaGames muzzle smoke renders slightly pink (effect colour parameter not set yet); weapon sprint / jump
+transition clips are not used yet (loops only).

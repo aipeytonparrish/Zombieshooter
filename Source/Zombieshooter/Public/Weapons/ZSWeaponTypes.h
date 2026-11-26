@@ -4,6 +4,11 @@
 #include "ZSWeaponTypes.generated.h"
 
 class UStaticMesh;
+class USkeletalMesh;
+class UAnimSequence;
+class UAnimMontage;
+class USoundBase;
+class UNiagaraSystem;
 
 /** Collision channel used by every hitscan trace (DefaultEngine.ini: GameTraceChannel1 = "Weapon"). */
 #define ZS_TRACE_WEAPON ECC_GameTraceChannel1
@@ -105,6 +110,79 @@ struct FZSWeaponPart
 	/** Part moves with the reload (drops out and back in). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Part")
 	bool bIsMagazine = false;
+};
+
+/** A sound at a point (0..1) of a reload, for weapons whose animations carry no sound events. */
+USTRUCT(BlueprintType)
+struct FZSTimedSound
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
+	float Fraction = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
+	TSoftObjectPtr<USoundBase> Sound;
+};
+
+/**
+ * Real first-person animation for a weapon (owner's FPS animation packs). When every required asset loads, the
+ * weapon runs in "animated" mode: a hidden driver arms mesh plays these clips, the visible gloved arms copy its pose,
+ * and the weapon mesh rides a bone of the driver. Otherwise the weapon falls back to code-posed arms + Stats.Parts.
+ */
+USTRUCT(BlueprintType)
+struct FZSWeaponAnimSet
+{
+	GENERATED_BODY()
+
+	/** Arms / body mesh on the clips' own skeleton (hidden, only drives the pose). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rig") TSoftObjectPtr<USkeletalMesh> DriverMesh;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rig") TSoftObjectPtr<USkeletalMesh> WeaponMesh;
+	/** Driver bone the weapon mesh attaches to, and the offset from it. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rig") FName WeaponAttachBone = TEXT("ik_hand_gun");
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rig") FTransform WeaponAttachOffset;
+
+	/** If set, the driver is moved every frame so this socket (e.g. the head camera socket) sits on the camera. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rig") FName CameraSocket;
+	/** Camera transform relative to CameraSocket (as authored in the pack's demo character). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rig") FTransform CameraFromSocket;
+	/** Used when CameraSocket is None: fixed driver transform relative to the camera. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rig") FTransform DriverRelativeToCamera;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arms") TSoftObjectPtr<UAnimSequence> Idle;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arms") TSoftObjectPtr<UAnimSequence> Walk;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arms") TSoftObjectPtr<UAnimSequence> Sprint;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arms") TSoftObjectPtr<UAnimSequence> AimIdle;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arms") TSoftObjectPtr<UAnimSequence> AimWalk;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arms") TSoftObjectPtr<UAnimSequence> Fire;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arms") TSoftObjectPtr<UAnimSequence> FireAimed;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arms") TSoftObjectPtr<UAnimSequence> Reload;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arms") TSoftObjectPtr<UAnimSequence> ReloadEmpty;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arms") TSoftObjectPtr<UAnimSequence> Equip;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arms") TSoftObjectPtr<UAnimSequence> Holster;
+
+	/** Weapon-mesh clips played in sync with the arms (bolt, magazine, slide). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon") TSoftObjectPtr<UAnimSequence> WeaponIdle;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon") TSoftObjectPtr<UAnimSequence> WeaponFire;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon") TSoftObjectPtr<UAnimSequence> WeaponReload;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon") TSoftObjectPtr<UAnimSequence> WeaponReloadEmpty;
+	/** Montages whose PlaySound notifies give the reload its sounds (optional). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon") TSoftObjectPtr<UAnimMontage> ReloadSoundMontage;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon") TSoftObjectPtr<UAnimMontage> ReloadEmptySoundMontage;
+	/** Used instead of montage notifies when the pack has none. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon") TArray<FZSTimedSound> ReloadSounds;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon") TArray<FZSTimedSound> ReloadEmptySounds;
+
+	/** Fire sounds: one is picked at random per shot. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio") TArray<TSoftObjectPtr<USoundBase>> FireSounds;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio") TSoftObjectPtr<USoundBase> FireTail;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio") TSoftObjectPtr<USoundBase> DryFire;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio") TSoftObjectPtr<USoundBase> EquipSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FX") TSoftObjectPtr<UNiagaraSystem> MuzzleFlash;
+	/** Weapon-mesh socket at the barrel end; if missing, MuzzleOffset (weapon-mesh space) is used. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FX") FName MuzzleSocket;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FX") FVector MuzzleOffset = FVector::ZeroVector;
 };
 
 /**

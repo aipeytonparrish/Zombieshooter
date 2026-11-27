@@ -32,4 +32,8 @@ public:
 	 *  breach points inside a closed start room. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ZS|Spawn")
 	float MinPlayerDistance = -1.f;
+
+	/** Outside a boarded window: zombies from here must tear its boards off and climb in before they can chase. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ZS|Spawn")
+	TObjectPtr<class AZSBarricade> Barricade;
 };

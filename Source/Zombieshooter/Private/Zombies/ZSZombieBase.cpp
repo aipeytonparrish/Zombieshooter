@@ -1,6 +1,7 @@
 #include "Zombies/ZSZombieBase.h"
 #include "Zombies/ZSZombieAnimInstance.h"
 #include "Zombies/ZSZombieAIController.h"
+#include "Navigation/PathFollowingComponent.h"
 #include "Combat/ZSHealthComponent.h"
 #include "Combat/ZSAimAssistSubsystem.h"
 #include "Combat/ZSBloodSubsystem.h"
@@ -19,6 +20,7 @@
 #include "Misc/Paths.h"
 #include "TimerManager.h"
 #include "Combat/ZSGoreSubsystem.h"
+#include "World/ZSBarricade.h"
 #include "Zombies/ZSSpitProjectile.h"
 #include "Rounds/ZSGameState_Survival.h"
 #include "Animation/Skeleton.h"
@@ -390,6 +392,11 @@ void AZSZombieBase::UpdateChase(float DeltaSeconds)
 		return;
 	}
 
+	if (UpdateBarricade(DeltaSeconds))
+	{
+		return;
+	}
+
 	const FVector ToTarget = Target->GetActorLocation() - GetActorLocation();
 	const float Dist2D = ToTarget.Size2D();
 	if (TrySpecialAction(Dist2D, Target))
@@ -463,6 +470,86 @@ void AZSZombieBase::UpdateChase(float DeltaSeconds)
 			}
 		}
 	}
+}
+
+bool AZSZombieBase::UpdateBarricade(float DeltaSeconds)
+{
+	AZSBarricade* B = Barricade.Get();
+	if (!B)
+	{
+		return false;
+	}
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	AZSZombieAIController* AI = Cast<AZSZombieAIController>(GetController());
+
+	// Climbing through: a scripted arc over the sill with collision off.
+	if (VaultTime >= 0.f)
+	{
+		const float Duration = ZombieType == EZSZombieType::Runner ? 0.55f : 0.9f;
+		VaultTime += DeltaSeconds;
+		const float A = FMath::Clamp(VaultTime / Duration, 0.f, 1.f);
+		const FVector Sill = B->GetSillPoint();
+		const FVector End = B->GetInsidePoint();
+		const FVector P = FMath::Lerp(FMath::Lerp(VaultStart, Sill, A), FMath::Lerp(Sill, End, A), A);   // quadratic bezier
+		SetActorLocation(P, false, nullptr, ETeleportType::TeleportPhysics);
+		if (A >= 1.f)
+		{
+			VaultTime = -1.f;
+			Barricade = nullptr;
+			GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+			Move->SetMovementMode(MOVE_Walking);
+			RepathTimer = 0.f;
+			ProgressStartDist = 1.e9f;
+			ProgressTimer = 0.f;
+		}
+		return true;
+	}
+
+	const FVector Out = B->GetOutsidePoint();
+	const FVector ToOut = Out - GetActorLocation();
+	if (ToOut.Size2D() > 60.f)
+	{
+		RepathTimer -= DeltaSeconds;
+		if (RepathTimer <= 0.f)
+		{
+			RepathTimer = 0.5f;
+			bDirectChase = !(AI && AI->MoveToLocation(Out, 25.f, false, true, false, true) != EPathFollowingRequestResult::Failed);
+		}
+		if (bDirectChase)
+		{
+			AddMovementInput(ToOut.GetSafeNormal2D());
+		}
+		return true;
+	}
+
+	// At the window: face in, rip the boards off one at a time, then climb through.
+	if (AI) { AI->StopMovement(); }
+	const FRotator Want(0.f, (B->GetInsidePoint() - GetActorLocation()).Rotation().Yaw, 0.f);
+	SetActorRotation(FMath::RInterpTo(GetActorRotation(), Want, DeltaSeconds, 8.f));
+	if (B->HasBoards())
+	{
+		TearTimer -= DeltaSeconds;
+		if (TearTimer <= 0.f)
+		{
+			TearTimer = ZombieType == EZSZombieType::Runner ? 1.1f : (ZombieType == EZSZombieType::Brute ? 0.8f : 1.7f);
+			if (UZSZombieAnimInstance* Anim = GetZombieAnim())
+			{
+				if (UAnimSequence* Swipe = RandomAnim(AttackAnims))
+				{
+					Anim->PlayAction(Swipe, 1.4f, 0.08f, 0.15f);
+				}
+			}
+			B->TearBoard(this);
+		}
+		return true;
+	}
+	UE_LOG(LogZS, Log, TEXT("Zombie %s climbing in through %s"), *GetName(), *B->GetName());
+	VaultTime = 0.f;
+	VaultStart = GetActorLocation();
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Move->StopMovementImmediately();
+	Move->SetMovementMode(MOVE_Flying);
+	return true;
 }
 
 void AZSZombieBase::StartAttack()

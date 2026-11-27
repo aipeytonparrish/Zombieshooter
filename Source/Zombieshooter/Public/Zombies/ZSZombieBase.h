@@ -74,6 +74,10 @@ class ZOMBIESHOOTER_API AZSZombieBase : public ACharacter
 	GENERATED_BODY()
 
 public:
+	/** Set when spawned outside a boarded window: the zombie has to get through it first. Cleared once inside. */
+	UPROPERTY(Transient)
+	TObjectPtr<class AZSBarricade> Barricade;
+
 	AZSZombieBase();
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ZS|Zombie", meta = (ExposeOnSpawn = true))
@@ -273,6 +277,12 @@ private:
 
 	// Physical hit reaction: the bodies below HitReactRoot blend toward physics for a moment and get shoved, so every
 	// bullet visibly knocks the body part it hit (head snaps back, shoulders twist, legs buckle).
+	/** Barricade logic (walk to the window, tear boards, climb in). True while it owns the zombie's frame. */
+	bool UpdateBarricade(float DeltaSeconds);
+	float TearTimer = 0.f;
+	float VaultTime = -1.f;
+	FVector VaultStart = FVector::ZeroVector;
+
 	void StartPhysicalHit(FName Bone, const FVector& Direction, float Damage);
 	void UpdatePhysicalHit(float DeltaSeconds);
 	void StopPhysicalHit();

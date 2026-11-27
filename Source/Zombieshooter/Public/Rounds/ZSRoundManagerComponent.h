@@ -131,6 +131,8 @@ private:
 
 	FZSRoundTuning Tuning;
 	TSet<FName> OpenZones;
+	/** The spawn point PickSpawnLocation chose last (for its barricade). */
+	mutable TWeakObjectPtr<const class AZSSpawnPoint> LastPickedPoint;
 	float SurgeTimer = 0.f;
 	int32 SurgeLeft = 0;
 	void StartSurge();

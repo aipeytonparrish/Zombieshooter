@@ -129,6 +129,7 @@ Source: `post-apocalyptic-abandoned-city-new-york.zip` (Desktop / Downloads): a 
 4. Safehouse kit: unpack `industrial-survival-horror-modular-kit.zip` and its `..._glTF.zip` into
    `Desktop/Enviorments Assets/_extract/IndustrialKit/`, then `Tools/Import/import_industrial_kit.py <glTF dir>`
    → `Content/IndustrialKit/` (git-ignored, complex collision).
+   Then `Tools/Import/kit_instancing_flags.py` (the compound draws the kit as instanced meshes).
 5. `Tools/Import/prepare_kitbash_buildings.py`: Nanite + collision on the Megascans NYC kitbash buildings.
 6. `Tools/Import/create_nyc_map.py` builds our `L_NYC` (weather, safehouse, kitbash backdrop buildings, gameplay
    actors) which streams the art level.

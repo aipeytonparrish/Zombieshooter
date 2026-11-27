@@ -530,14 +530,26 @@ brownstones, rusted cars, debris piles, dead trees and street lamps along the ri
 along the east side and the north end. Play area ~42 × 140 m along the street (invisible walls at the river and
 the far facades), 3 ammo crates.
 
-**Round-based start, indoors then out:**
-- You start inside the **safehouse** at the north end of the street: two rooms built from your industrial
-  modular kit (pipes, vents, cracked windows, a red emergency lamp by the door).
-- Zombies climb up through the floor grates in the back room and come at you through the divider doorway.
-- The boarded **street door** costs **$350 run cash** (Interact). Buying it knocks the boards out and opens the
-  street: from then on zombies also come from the 18 spawn points along the street (zone "Street").
-- Generic pieces you can reuse in other maps: `AZSBuyDoor` (cost, zone, label, opening size, board material)
-  and `AZSSpawnPoint` **Zone** / **Min Player Distance**.
+**The compound (classic round-based layout):** you start in the start room at the north end of the street; behind it
+is a 40 x 60 m compound built from your industrial modular kit (`Tools/Import/nyc_compound.py` has the floor plan):
+
+| Area | How you get in | Cost |
+|---|---|---|
+| Start room | — | — |
+| Hallway + Offices + Storage | HALLWAY door (start room, north wall) | $750 |
+| Locker room | LOCKER ROOM door (offices or hallway) | $1000 |
+| Generator room | GENERATOR ROOM door (storage or hallway) | $1000 |
+| Warehouse (6 m high) | WAREHOUSE door (locker room, hallway or generator room) | $1250 |
+| Courtyard — outdoor fight area 2 | LOADING BAY (warehouse, north wall) | $1500 |
+| The street — outdoor fight area 1 | STREET DOOR (start room, south wall) | $350 |
+
+- **Zombies come from outside**, like the classic mode: each room has boarded windows (`AZSBarricade`, 19 in all) with
+  a spawn point outside. Zombies walk up, rip the boards off one by one and climb in. Stand at a window and press
+  **Interact** to nail a board back (+$10 each). The street and courtyard also have ground spawns.
+- Ammo crates: offices, warehouse, courtyard, start room (plus the three on the street).
+- Reusable pieces: `AZSBuyDoor`, `AZSBarricade` (opening size, sill height, boards, repair reward),
+  `AZSSpawnPoint` **Zone** / **Min Player Distance** / **Barricade**, and `AZSKitInstances` (draws thousands of kit
+  pieces as a handful of instanced meshes).
 
 **Intensity (all maps):** denser rounds from round 1 (14 alive at once, quicker spawns, sprinters from round 2,
 faster zombies later); **horde surges** from round 3 — about 9 s into a round and then every 30 s a burst of
@@ -562,5 +574,26 @@ Known: the art was a render scene. The rubble piles are low-poly by design (the 
 "debrispilelowres"); they need a rubble pack to replace (Docs/AssetRequests.md). The river surface is solid
 (the walls keep you off it).
 
-Test helpers: `ZSRunCash 400` (run cash for this run only), `ZSUseDoors` (uses every buy door). Launches with
+Test helpers: `ZSRunCash 400` (run cash for this run only), `ZSUseDoors` (uses every buy door, i.e. opens the
+whole compound). Launches with
 `-ZSAutoShot=` never write your save any more (they used to count as force-quit runs).
+
+## Combat feel, gore, HUD pass
+
+- **Melee:** right stick click (V / mouse thumb button on keyboard). The AR plays its rifle-butt bash, other guns a
+  quick jab. 150 damage (kills early-round zombies in one hit), shoves survivors back, works as a panic button.
+- **Hits:** every bullet physically jolts the body part it hits (head snaps back, legs buckle), stutters the zombie's
+  stride and shoves it on heavy hits; a tick on every hit and a heavy thud on kills; a camera punch on every shot.
+- **Impacts:** bullet holes, dust and chips on concrete / dirt / wood, sparks off metal, and an impact sound per surface
+  (the surface is guessed from the material / mesh name). The orange debug dots are off (`zs.ShowImpacts 1` brings
+  them back for tuning).
+- **Blood:** our own procedural splatter textures and particles: exit mist, droplets, splats that run out on walls and
+  floors, pools that spread under bodies, wet gibs that trail blood and splat where they land. Rebuild the textures and
+  materials with `Tools/Import/gen_fx_textures.py Saved/GeneratedFX` (plain Python) then `create_gore_fx.py` (editor).
+- **Movement:** sprint (left stick click) then crouch (B) to slide; slides are longer and faster, jump out of one to
+  keep the speed, and if a slide runs out while you're still pushing forward you're straight back into the sprint.
+- **HUD:** Left 4 Dead style plates — survivor card (name, level, big health number and bar in green / yellow / red,
+  white damage trail, armour plates), weapon card (name, fire mode, big magazine count, reserve, a pip per round),
+  the round number painted over a blood smear; the screen drains to black and white near death.
+- **Home base:** a mood volume over the bunker (a stop darker, more contrast, cooler, vignette, grain) and the stations
+  are worn-steel benches (they rendered plain white before).

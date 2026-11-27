@@ -139,7 +139,12 @@ decals, and the 10 missing Textures.com maps from the .blend (`TexturesCom_Marbl
 **Rubble / debris pack** (high-detail concrete rubble piles, broken bricks, rebar; Nanite or high-poly): the
 scene's debris piles are low-poly by design and are the roughest-looking thing left in the street.
 **Thunder** one-shots (2–4 variations) for the lightning, and a **wood / metal barricade break** sound for the
-safehouse door.
+safehouse door and the window barricades (a board being ripped off, a board being nailed back).
+**Movement foley:** footsteps (concrete, metal grate, dirt), a **slide** scrape loop, landing thumps.
+**Props for the compound:** crates / pallets / shelving / lockers / desks / a generator (industrial or warehouse prop
+pack) — the warehouse and rooms are mostly bare walls and pillars right now.
+**Blood / gore VFX pack** (optional upgrade): our blood is procedural (own textures + particles); a pro pack with
+flipbook spurts and wound decals would look even better.
 
 ### Later milestones
 City block kit (M14), character creator parts on the Mannequin skeleton (M9), all special

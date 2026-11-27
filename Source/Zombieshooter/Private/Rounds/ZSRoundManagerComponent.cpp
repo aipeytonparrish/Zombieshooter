@@ -2,6 +2,7 @@
 #include "Rounds/ZSGameState_Survival.h"
 #include "Zombies/ZSZombieBase.h"
 #include "World/ZSSpawnPoint.h"
+#include "World/ZSBarricade.h"
 #include "World/ZSPickup.h"
 #include "Player/ZSPlayerCharacter.h"
 #include "Player/ZSCameraComponent.h"
@@ -262,7 +263,13 @@ bool UZSRoundManagerComponent::RelocateStraggler(AZSZombieBase* Zombie)
 	{
 		return false;
 	}
-	return Zombie->TeleportTo(Loc, Rot);
+	if (!Zombie->TeleportTo(Loc, Rot))
+	{
+		return false;
+	}
+	const AZSSpawnPoint* From = LastPickedPoint.Get();
+	Zombie->Barricade = From ? From->Barricade : nullptr;
+	return true;
 }
 
 void UZSRoundManagerComponent::PlayStinger(USoundBase* Sound, float Volume, float Pitch) const
@@ -305,6 +312,7 @@ bool UZSRoundManagerComponent::PickSpawnLocation(FVector& OutLocation, FRotator&
 	}
 	const FVector P = Player->GetActorLocation();
 	bOutAllowRunners = true;
+	LastPickedPoint = nullptr;
 
 	if (SpawnPoints.Num() > 0)
 	{
@@ -354,6 +362,12 @@ bool UZSRoundManagerComponent::PickSpawnLocation(FVector& OutLocation, FRotator&
 			OutLocation = Chosen->GetActorLocation() + FVector(FMath::FRandRange(-60.f, 60.f), FMath::FRandRange(-60.f, 60.f), 0.f);
 			OutRotation = FRotator(0.f, (P - OutLocation).Rotation().Yaw, 0.f);
 			bOutAllowRunners = Chosen->bAllowRunners;
+			LastPickedPoint = Chosen;
+			if (Chosen->Barricade)
+			{
+				OutLocation = Chosen->GetActorLocation() + FVector(FMath::FRandRange(-40.f, 40.f), FMath::FRandRange(-40.f, 40.f), 0.f);
+				OutRotation = FRotator(0.f, (Chosen->Barricade->GetActorLocation() - OutLocation).Rotation().Yaw, 0.f);
+			}
 			return true;
 		}
 		if (bZoned)
@@ -432,6 +446,10 @@ void UZSRoundManagerComponent::SpawnOne()
 	}
 	Z->HealthMultiplier = Tuning.HealthMultiplier;
 	Z->SpeedMultiplier = Tuning.SpeedMultiplier;
+	if (const AZSSpawnPoint* From = LastPickedPoint.Get())
+	{
+		Z->Barricade = From->Barricade;
+	}
 	Z->FinishSpawning(T);
 	if (!IsValid(Z))
 	{
@@ -439,6 +457,7 @@ void UZSRoundManagerComponent::SpawnOne()
 		return;
 	}
 	Z->OnKilled.AddUObject(this, &ThisClass::HandleZombieKilled);
+	UE_LOG(LogZS, Log, TEXT("Spawned %s at %s%s"), *Z->GetName(), *Loc.ToCompactString(), Z->Barricade ? *FString::Printf(TEXT(" (outside %s)"), *Z->Barricade->GetName()) : TEXT(""));
 	--ToSpawn;
 	++Alive;
 }

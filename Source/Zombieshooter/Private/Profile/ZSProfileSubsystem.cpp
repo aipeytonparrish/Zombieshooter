@@ -1,4 +1,5 @@
 #include "Profile/ZSProfileSubsystem.h"
+#include "Core/ZSCharacterCatalog.h"
 #include "Profile/ZSSaveGame.h"
 #include "Weapons/ZSWeaponCatalog.h"
 #include "Engine/CurveTable.h"
@@ -68,6 +69,78 @@ void UZSProfileSubsystem::Save()
 // ---- Queries --------------------------------------------------------------------------------
 
 int32 UZSProfileSubsystem::GetLevel() const { return Profile ? Profile->Level : 1; }
+int32 UZSProfileSubsystem::GetPrestige() const { return Profile ? Profile->Prestige : 0; }
+int32 UZSProfileSubsystem::GetUnlockLevel() const { return GetPrestige() > 0 ? MaxLevel : GetLevel(); }
+bool UZSProfileSubsystem::CanPrestige() const { return Profile && Profile->Level >= MaxLevel && Profile->Prestige < MaxPrestige; }
+float UZSProfileSubsystem::GetPrestigeBonus() const { return FMath::Min(MaxPrestigeBonus, PrestigeBonusPerRank * GetPrestige()); }
+
+FText UZSProfileSubsystem::PrestigeTier(int32 Rank)
+{
+	if (Rank <= 0) { return NSLOCTEXT("ZS", "TierNone", "Unranked"); }
+	if (Rank < 5) { return NSLOCTEXT("ZS", "TierBronze", "Bronze"); }
+	if (Rank < 10) { return NSLOCTEXT("ZS", "TierSilver", "Silver"); }
+	if (Rank < 15) { return NSLOCTEXT("ZS", "TierGold", "Gold"); }
+	if (Rank < 20) { return NSLOCTEXT("ZS", "TierPlatinum", "Platinum"); }
+	if (Rank < MaxPrestige) { return NSLOCTEXT("ZS", "TierObsidian", "Obsidian"); }
+	return NSLOCTEXT("ZS", "TierMaster", "Master");
+}
+
+FLinearColor UZSProfileSubsystem::PrestigeColor(int32 Rank)
+{
+	if (Rank <= 0) { return FLinearColor(0.8f, 0.8f, 0.8f, 1.f); }
+	if (Rank < 5) { return FLinearColor(0.85f, 0.5f, 0.25f, 1.f); }
+	if (Rank < 10) { return FLinearColor(0.8f, 0.85f, 0.9f, 1.f); }
+	if (Rank < 15) { return FLinearColor(1.f, 0.8f, 0.2f, 1.f); }
+	if (Rank < 20) { return FLinearColor(0.6f, 0.95f, 1.f, 1.f); }
+	if (Rank < MaxPrestige) { return FLinearColor(0.7f, 0.45f, 1.f, 1.f); }
+	return FLinearColor(1.f, 0.15f, 0.15f, 1.f);
+}
+
+TArray<FText> UZSProfileSubsystem::PrestigeRewards(int32 Rank)
+{
+	TArray<FText> Out;
+	const int32 Pct = FMath::RoundToInt(FMath::Min(MaxPrestigeBonus, PrestigeBonusPerRank * Rank) * 100.f);
+	Out.Add(FText::Format(NSLOCTEXT("ZS", "PrRwBonus", "+{0}% XP and cash on every won run (permanent)"), FText::AsNumber(Pct)));
+	Out.Add(FText::Format(NSLOCTEXT("ZS", "PrRwCash", "${0} payout"), FText::AsNumber(PrestigeCashReward(Rank))));
+	if (Rank == 1 || PrestigeTier(Rank).ToString() != PrestigeTier(Rank - 1).ToString())
+	{
+		Out.Add(FText::Format(NSLOCTEXT("ZS", "PrRwEmblem", "{0} prestige emblem"), PrestigeTier(Rank)));
+	}
+	for (const ZSCharacterCatalog::FTint& T : ZSCharacterCatalog::Tints())
+	{
+		if (T.RequiredPrestige == Rank)
+		{
+			Out.Add(FText::Format(NSLOCTEXT("ZS", "PrRwTint", "Exclusive glove tint: {0}"), T.DisplayName));
+		}
+	}
+	return Out;
+}
+
+bool UZSProfileSubsystem::DoPrestige(FText& OutMessage)
+{
+	if (!CanPrestige())
+	{
+		OutMessage = Profile && Profile->Prestige >= MaxPrestige ? NSLOCTEXT("ZS", "PrMaxed", "You are already a Prestige Master.")
+			: FText::Format(NSLOCTEXT("ZS", "PrNeedLevel", "Reach level {0} to prestige."), FText::AsNumber(MaxLevel));
+		return false;
+	}
+	Profile->Prestige++;
+	Profile->Level = 1;
+	Profile->LevelXP = 0;
+	Profile->Cash += PrestigeCashReward(Profile->Prestige);
+	Save();
+	OutMessage = FText::Format(NSLOCTEXT("ZS", "PrDone", "PRESTIGE {0} ({1}).  +${2}.  Level reset to 1 - everything you own stays."),
+		FText::AsNumber(Profile->Prestige), PrestigeTier(Profile->Prestige), FText::AsNumber(PrestigeCashReward(Profile->Prestige)));
+	UE_LOG(LogZS, Log, TEXT("Prestiged to rank %d."), Profile->Prestige);
+	return true;
+}
+
+void UZSProfileSubsystem::SetPrestigeDebug(int32 Rank)
+{
+	if (!Profile) { return; }
+	Profile->Prestige = FMath::Clamp(Rank, 0, MaxPrestige);
+	Save();
+}
 int32 UZSProfileSubsystem::GetLevelXP() const { return Profile ? Profile->LevelXP : 0; }
 int64 UZSProfileSubsystem::GetCash() const { return Profile ? Profile->Cash : 0; }
 const FZSLifetimeStats& UZSProfileSubsystem::GetStats() const { static FZSLifetimeStats Empty; return Profile ? Profile->Stats : Empty; }
@@ -89,6 +162,10 @@ int32 UZSProfileSubsystem::XPToNext(int32 Level) const
 		{
 			Needed = Curve->Eval(L, Needed);
 		}
+	}
+	if (GetPrestige() > 0)
+	{
+		Needed *= PrestigeXPScale;
 	}
 	return FMath::Max(1, FMath::RoundToInt(Needed));
 }
@@ -332,7 +409,7 @@ bool UZSProfileSubsystem::BuyWeapon(FName ItemId, FText& OutMessage)
 		OutMessage = NSLOCTEXT("ZS", "NotInStock", "Not in stock today.");
 		return false;
 	}
-	if (GetLevel() < E->RequiredLevel)
+	if (GetUnlockLevel() < E->RequiredLevel)
 	{
 		OutMessage = FText::Format(NSLOCTEXT("ZS", "NeedLevel", "Requires level {0}."), FText::AsNumber(E->RequiredLevel));
 		return false;
@@ -414,7 +491,7 @@ FText UZSProfileSubsystem::CanFitAttachment(const FGuid& WeaponId, FName Attachm
 	{
 		return NSLOCTEXT("ZS", "AttMax", "This gun already has 5 attachments.");
 	}
-	if (GetLevel() < A->RequiredLevel)
+	if (GetUnlockLevel() < A->RequiredLevel)
 	{
 		return FText::Format(NSLOCTEXT("ZS", "NeedLevel", "Requires level {0}."), FText::AsNumber(A->RequiredLevel));
 	}
@@ -565,7 +642,7 @@ int32 UZSProfileSubsystem::AddXP(int32 Amount)
 	}
 	if (Profile->Level >= MaxLevel)
 	{
-		Profile->LevelXP = FMath::Min(Profile->LevelXP, XPToNext(MaxLevel));   // prestige arrives in Milestone 13
+		Profile->LevelXP = FMath::Min(Profile->LevelXP, XPToNext(MaxLevel));   // banked toward nothing until you prestige
 	}
 	return Gained;
 }
@@ -591,6 +668,16 @@ FZSRunResult UZSProfileSubsystem::EndRun(EZSRunOutcome Outcome, const FZSRunStat
 	{
 		R.XPBonus = WinBonusXP;
 		R.CashBonus = WinBonusCash;
+		const float PB = GetPrestigeBonus();
+		if (PB > 0.f)
+		{
+			const int32 BonusXP = FMath::RoundToInt((R.XPEarned + R.XPBonus) * PB);
+			const int32 BonusCash = FMath::RoundToInt((R.CashEarned + R.CashBonus) * PB);
+			R.XPBonus += BonusXP;
+			R.CashBonus += BonusCash;
+			R.Unlocks.Add(FText::Format(NSLOCTEXT("ZS", "PrBonusLine", "Prestige {0} bonus +{1}%: +{2} XP, ${3}"), FText::AsNumber(Profile->Prestige),
+				FText::AsNumber(FMath::RoundToInt(PB * 100.f)), FText::AsNumber(BonusXP), FText::AsNumber(BonusCash)));
+		}
 		R.XPKept = R.XPEarned + R.XPBonus;
 		R.CashKept = R.CashEarned + R.CashBonus;
 		AddXP(R.XPKept);
@@ -609,6 +696,14 @@ FZSRunResult UZSProfileSubsystem::EndRun(EZSRunOutcome Outcome, const FZSRunStat
 	for (int32 L = R.LevelBefore + 1; L <= R.LevelAfter; ++L)
 	{
 		R.Unlocks.Add(FText::Format(NSLOCTEXT("ZS", "LevelUnlock", "Level {0} reached"), FText::AsNumber(L)));
+		if (L == MaxLevel && Profile->Prestige < MaxPrestige)
+		{
+			R.Unlocks.Add(NSLOCTEXT("ZS", "PrAvailable", "MAX LEVEL - you can PRESTIGE at the mission board"));
+		}
+		if (Profile->Prestige > 0)
+		{
+			continue;   // everything is already unlocked
+		}
 		for (const ZSWeaponCatalog::FEntry& E : ZSWeaponCatalog::All())
 		{
 			if (E.RequiredLevel == L) { R.Unlocks.Add(FText::Format(NSLOCTEXT("ZS", "UnlockWeapon", "Market: {0}"), E.DisplayName)); }

@@ -122,6 +122,10 @@ public:
 	UFUNCTION(Exec)
 	void ZSGiveXP(int32 Amount);
 
+	/** ZSPrestige -1 = prestige now (needs level 55); ZSPrestige 7 = set the rank directly (testing). */
+	UFUNCTION(Exec)
+	void ZSPrestige(int32 Rank = -1);
+
 	/** ZSWinRun -> survival: end the run as a win now (testing). */
 	UFUNCTION(Exec)
 	void ZSWinRun();

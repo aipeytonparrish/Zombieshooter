@@ -497,3 +497,28 @@ is ~38 min plus breaks and the boss ≈ 45 min; at ~2.5 s per zombie ≈ 60 min.
 scaled zombie until a mutant mesh arrives (see AssetRequests).
 
 Console: `ZSBoss` jumps to the boss round.
+
+## Milestone 13 — Prestige and long progression
+
+**Levels 1–55.** A won run banks roughly 35–40k XP (kills, rounds, tasks, boss, win bonus, missions), and the curve
+(`Data/ZSLevels.csv` → `CT_ZSLevels`) needs ~1.05M XP for level 55, so the first climb is ~28 wins (25–35 hours of
+winning play, more with losses, since failed runs bank nothing). Levels unlock market guns, attachments, survivors,
+gloves and maps; the results screen lists each unlock as it happens.
+
+**Prestige** (mission board, top entry). At level 55 the entry says READY:
+- Your level goes back to 1 and your prestige rank goes up (1–25).
+- **Nothing is taken away:** weapons, attachments, cash, outfits and every unlock are kept (unlocks stay open once
+  you have prestiged at least once).
+- Climbing back to 55 takes 60% of the normal XP (~14 hours per rank).
+
+| Each rank gives | |
+|---|---|
+| Permanent bonus | +2% XP and cash on every won run (max +40% at rank 20) — shown as a line on the results screen |
+| Payout | $2,500 × rank |
+| Emblem | Bronze (1–4), Silver (5–9), Gold (10–14), Platinum (15–19), Obsidian (20–24), Master (25), shown in the bunker panel and the menu headers |
+| Exclusive glove tints | Bronze Rank (1), Hazard Orange (3), Silver Rank (5), Toxic (8), Gold Rank (10), Bone (12), Platinum Rank (15), Ember (18), Obsidian Rank (20), Master Crimson (25) — Locker → GLOVE TINT |
+
+The bunker panel shows "PRESTIGE READY - MISSION BOARD" at level 55. Selecting PRESTIGE shows the next rank's
+rewards; confirm on the second page.
+
+Console: `ZSGiveXP 2000000` (to level 55), `ZSPrestige` (prestige now), `ZSPrestige 7` (set the rank directly).

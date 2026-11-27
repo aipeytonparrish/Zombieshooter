@@ -704,6 +704,23 @@ void AZSPlayerController::ZSGiveCash(int32 Amount)
 	if (UZSProfileSubsystem* P = UZSProfileSubsystem::Get(this)) { P->GiveCash(Amount); ZSProfile(); }
 }
 
+void AZSPlayerController::ZSPrestige(int32 Rank)
+{
+	UZSProfileSubsystem* P = UZSProfileSubsystem::Get(this);
+	if (!P) { return; }
+	if (Rank < 0)
+	{
+		FText Msg;
+		P->DoPrestige(Msg);
+		UE_LOG(LogZS, Warning, TEXT("%s"), *Msg.ToString());
+	}
+	else
+	{
+		P->SetPrestigeDebug(Rank);
+	}
+	ZSProfile();
+}
+
 void AZSPlayerController::ZSGiveXP(int32 Amount)
 {
 	if (UZSProfileSubsystem* P = UZSProfileSubsystem::Get(this)) { P->GiveXP(Amount); ZSProfile(); }

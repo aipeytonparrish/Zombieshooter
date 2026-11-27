@@ -37,6 +37,7 @@ namespace ZSCharacterCatalog
 	{
 		FText DisplayName;
 		FLinearColor Color;   // alpha 0 = keep the material's own colours
+		int32 RequiredPrestige = 0;
 	};
 
 	ZOMBIESHOOTER_API const TArray<FBody>& Bodies();

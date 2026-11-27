@@ -57,6 +57,17 @@ namespace ZSCharacterCatalog
 			{ NSLOCTEXT("ZS", "TintRed", "Blood Red"),   FLinearColor(0.35f, 0.03f, 0.03f, 1.f) },
 			{ NSLOCTEXT("ZS", "TintArctic", "Arctic"),   FLinearColor(0.7f, 0.72f, 0.75f, 1.f) },
 			{ NSLOCTEXT("ZS", "TintGrey", "Urban Grey"), FLinearColor(0.2f, 0.2f, 0.21f, 1.f) },
+			// Prestige-exclusive (Milestone 13).
+			{ NSLOCTEXT("ZS", "TintBronze", "Bronze Rank"),     FLinearColor(0.45f, 0.22f, 0.08f, 1.f), 1 },
+			{ NSLOCTEXT("ZS", "TintHazard", "Hazard Orange"),   FLinearColor(0.8f, 0.25f, 0.02f, 1.f), 3 },
+			{ NSLOCTEXT("ZS", "TintSilver", "Silver Rank"),     FLinearColor(0.55f, 0.58f, 0.62f, 1.f), 5 },
+			{ NSLOCTEXT("ZS", "TintToxic", "Toxic"),            FLinearColor(0.2f, 0.65f, 0.05f, 1.f), 8 },
+			{ NSLOCTEXT("ZS", "TintGold", "Gold Rank"),         FLinearColor(0.85f, 0.6f, 0.12f, 1.f), 10 },
+			{ NSLOCTEXT("ZS", "TintBone", "Bone"),              FLinearColor(0.75f, 0.7f, 0.58f, 1.f), 12 },
+			{ NSLOCTEXT("ZS", "TintPlatinum", "Platinum Rank"), FLinearColor(0.6f, 0.85f, 0.9f, 1.f), 15 },
+			{ NSLOCTEXT("ZS", "TintEmber", "Ember"),            FLinearColor(0.6f, 0.08f, 0.02f, 1.f), 18 },
+			{ NSLOCTEXT("ZS", "TintObsidian", "Obsidian Rank"), FLinearColor(0.12f, 0.03f, 0.2f, 1.f), 20 },
+			{ NSLOCTEXT("ZS", "TintMaster", "Master Crimson"),  FLinearColor(0.9f, 0.02f, 0.05f, 1.f), 25 },
 		};
 		return List;
 	}

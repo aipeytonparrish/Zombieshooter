@@ -454,6 +454,14 @@ void AZSHUD::DrawBunker(AZSBunkerGameMode* GM, float Scale)
 	};
 	Line(TEXT("THE BUNKER"), 1.8f, HeadGold);
 	Line(FString::Printf(TEXT("LEVEL %d"), Profile->GetLevel()), 1.4f, HudWhite);
+	if (const int32 Rank = Profile->GetPrestige())
+	{
+		Line(FString::Printf(TEXT("PRESTIGE %d  %s"), Rank, *UZSProfileSubsystem::PrestigeTier(Rank).ToString().ToUpper()), 1.1f, UZSProfileSubsystem::PrestigeColor(Rank));
+	}
+	else if (Profile->CanPrestige())
+	{
+		Line(TEXT("PRESTIGE READY - MISSION BOARD"), 1.1f, HeadGold);
+	}
 
 	// XP bar.
 	const float BarW = 320.f * Scale, BarH = 8.f * Scale;

@@ -37,6 +37,11 @@ namespace ZSBunkerMenus
 
 	static FText CashLine(const UZSProfileSubsystem* Profile)
 	{
+		if (Profile->GetPrestige() > 0)
+		{
+			return FText::Format(NSLOCTEXT("ZS", "CashLineP", "Cash {0}   Level {1}   Prestige {2} ({3})"), Money(Profile->GetCash()),
+				FText::AsNumber(Profile->GetLevel()), FText::AsNumber(Profile->GetPrestige()), UZSProfileSubsystem::PrestigeTier(Profile->GetPrestige()));
+		}
 		return FText::Format(NSLOCTEXT("ZS", "CashLine", "Cash {0}   Level {1}"), Money(Profile->GetCash()), FText::AsNumber(Profile->GetLevel()));
 	}
 
@@ -128,7 +133,7 @@ namespace ZSBunkerMenus
 			P.Items.Reset();
 			for (const ZSLevelCatalog::FEntry& L : ZSLevelCatalog::All())
 			{
-				const bool bUnlocked = Profile->GetLevel() >= L.RequiredLevel;
+				const bool bUnlocked = Profile->GetUnlockLevel() >= L.RequiredLevel;
 				const bool bBuilt = !L.MapURL.IsEmpty();
 				FText Value = !bUnlocked ? FText::Format(NSLOCTEXT("ZS", "LockedLvl", "LOCKED - LEVEL {0}"), FText::AsNumber(L.RequiredLevel))
 					: (bBuilt ? NSLOCTEXT("ZS", "Available", "AVAILABLE") : NSLOCTEXT("ZS", "ComingSoon", "COMING SOON"));
@@ -253,7 +258,7 @@ namespace ZSBunkerMenus
 				const FText Why = Profile->CanFitAttachment(WeaponId, AttId);
 				const FText Label = FText::Format(NSLOCTEXT("ZS", "AttLabel", "{0}: {1}"), ZSWeaponCatalog::SlotName(A->Slot), A->DisplayName);
 				FText Value = bFitted ? NSLOCTEXT("ZS", "FittedTag", "FITTED - REMOVE")
-					: (Profile->GetLevel() < A->RequiredLevel ? FText::Format(NSLOCTEXT("ZS", "LvlTag", "LEVEL {0}"), FText::AsNumber(A->RequiredLevel)) : Money(A->Price));
+					: (Profile->GetUnlockLevel() < A->RequiredLevel ? FText::Format(NSLOCTEXT("ZS", "LvlTag", "LEVEL {0}"), FText::AsNumber(A->RequiredLevel)) : Money(A->Price));
 				FText Detail = Why.IsEmpty() || bFitted ? A->Description
 					: FText::Format(NSLOCTEXT("ZS", "AttWhy", "{0}\n\n{1}"), A->Description, Why);
 				P.Items.Emplace(Label, [WeakPC, WeaponId, AttId, bFitted]()
@@ -348,7 +353,7 @@ namespace ZSBunkerMenus
 			{
 				const ZSWeaponCatalog::FEntry* E = ZSWeaponCatalog::Find(O.ItemId);
 				if (!E) { continue; }
-				const bool bLocked = Profile->GetLevel() < E->RequiredLevel;
+				const bool bLocked = Profile->GetUnlockLevel() < E->RequiredLevel;
 				FText Value = bLocked ? FText::Format(NSLOCTEXT("ZS", "LvlTag", "LEVEL {0}"), FText::AsNumber(E->RequiredLevel))
 					: (O.bDeal ? FText::Format(NSLOCTEXT("ZS", "DealTag", "DEAL {0} (was {1})"), Money(O.Price), Money(O.FullPrice)) : Money(O.Price));
 				FText Label = FText::Format(NSLOCTEXT("ZS", "OfferLabel", "{0}{1}"), E->DisplayName,
@@ -424,7 +429,7 @@ namespace ZSBunkerMenus
 			UZSProfileSubsystem* Profile = ProfileOf(WeakPC);
 			if (!Profile) { return; }
 			const FZSCharacterLook Look = Profile->GetLook();
-			const int32 Level = Profile->GetLevel();
+			const int32 Level = Profile->GetUnlockLevel();
 			const auto& Bodies = ZSCharacterCatalog::Bodies();
 			const auto& Arms = ZSCharacterCatalog::Arms();
 			const auto& Tints = ZSCharacterCatalog::Tints();
@@ -442,7 +447,7 @@ namespace ZSBunkerMenus
 				UZSProfileSubsystem* Pr = ProfileOf(WeakPC);
 				if (!Pr) { return; }
 				FZSCharacterLook L = Pr->GetLook();
-				const int32 Lvl = Pr->GetLevel();
+				const int32 Lvl = Pr->GetUnlockLevel();
 				L.Body = Next(L.Body, ZSCharacterCatalog::Bodies().Num(), [Lvl](int32 I) { return Lvl >= ZSCharacterCatalog::Bodies()[I].RequiredLevel; });
 				Pr->SetLook(L);
 			}, Bodies.IsValidIndex(Look.Body) ? Bodies[Look.Body].DisplayName : FText::GetEmpty());
@@ -465,16 +470,17 @@ namespace ZSBunkerMenus
 				UZSProfileSubsystem* Pr = ProfileOf(WeakPC);
 				if (!Pr) { return; }
 				FZSCharacterLook L = Pr->GetLook();
-				const int32 Lvl = Pr->GetLevel();
+				const int32 Lvl = Pr->GetUnlockLevel();
 				L.Arms = Next(L.Arms, ZSCharacterCatalog::Arms().Num(), [Lvl](int32 I) { return Lvl >= ZSCharacterCatalog::Arms()[I].RequiredLevel; });
 				Pr->SetLook(L);
 			}, Arms[ArmsShown].DisplayName, FText::GetEmpty(), !Look.bMatchArms);
-			P.Items.Emplace(NSLOCTEXT("ZS", "LkTint", "GLOVE TINT"), [WeakPC]()
+			P.Items.Emplace(NSLOCTEXT("ZS", "LkTint", "GLOVE TINT"), [WeakPC, Next]()
 			{
 				UZSProfileSubsystem* Pr = ProfileOf(WeakPC);
 				if (!Pr) { return; }
 				FZSCharacterLook L = Pr->GetLook();
-				L.Tint = (L.Tint + 1) % ZSCharacterCatalog::Tints().Num();
+				const int32 Rank = Pr->GetPrestige();
+				L.Tint = Next(L.Tint, ZSCharacterCatalog::Tints().Num(), [Rank](int32 I) { return Rank >= ZSCharacterCatalog::Tints()[I].RequiredPrestige; });
 				Pr->SetLook(L);
 			}, Tints[TintShown].DisplayName, FText::GetEmpty(), !Look.bMatchArms);
 			P.Items.Add(BackItem(WeakPC));
@@ -498,6 +504,62 @@ namespace ZSBunkerMenus
 				FText::AsNumber(D.GetHours()), FText::AsNumber(D.GetMinutes()), FText::AsNumber(W.GetDays()), FText::AsNumber(W.GetHours()),
 				FText::AsNumber(FMath::Min(Missions->GetStoryChapter() + 1, Missions->GetStoryChapterCount())), FText::AsNumber(Missions->GetStoryChapterCount()));
 			P.Items.Reset();
+			if (const UZSProfileSubsystem* Pr = ProfileOf(WeakPC))
+			{
+				const int32 Rank = Pr->GetPrestige();
+				if (Rank >= UZSProfileSubsystem::MaxPrestige)
+				{
+					P.Items.Emplace(NSLOCTEXT("ZS", "PrMasterLabel", "PRESTIGE   Master"), []() {}, NSLOCTEXT("ZS", "PrMaxTag", "MAXED"),
+						NSLOCTEXT("ZS", "PrMasterDetail", "You have reached the final prestige rank. Every bonus and cosmetic is yours."));
+				}
+				else
+				{
+					FString Rewards;
+					for (const FText& T : UZSProfileSubsystem::PrestigeRewards(Rank + 1)) { Rewards += TEXT("- ") + T.ToString() + TEXT("\n"); }
+					const FText Detail = FText::Format(NSLOCTEXT("ZS", "PrDetail", "Prestige to rank {0} ({1}) once you reach level {2}.\n\nYour level goes back to 1 and climbs again at {3}% of the usual XP. You KEEP every weapon, attachment, outfit, unlock and all your cash.\n\nRewards:\n{4}"),
+						FText::AsNumber(Rank + 1), UZSProfileSubsystem::PrestigeTier(Rank + 1), FText::AsNumber(UZSProfileSubsystem::MaxLevel),
+						FText::AsNumber(FMath::RoundToInt(UZSProfileSubsystem::PrestigeXPScale * 100.f)), FText::FromString(Rewards));
+					const bool bCan = Pr->CanPrestige();
+					const FText Value = bCan ? NSLOCTEXT("ZS", "PrReady", "READY")
+						: FText::Format(NSLOCTEXT("ZS", "PrLevelTag", "LEVEL {0}/{1}"), FText::AsNumber(Pr->GetLevel()), FText::AsNumber(UZSProfileSubsystem::MaxLevel));
+					const FText Label = Rank > 0
+						? FText::Format(NSLOCTEXT("ZS", "PrLabelRank", "PRESTIGE   Rank {0} ({1})  >  {2}"), FText::AsNumber(Rank), UZSProfileSubsystem::PrestigeTier(Rank), FText::AsNumber(Rank + 1))
+						: NSLOCTEXT("ZS", "PrLabel", "PRESTIGE");
+					P.Items.Emplace(Label, [WeakPC]()
+					{
+						UZSProfileSubsystem* Prof = ProfileOf(WeakPC);
+						if (!Prof || !WeakPC.IsValid()) { return; }
+						if (!Prof->CanPrestige())
+						{
+							FText Msg;
+							Prof->DoPrestige(Msg);   // only builds the "reach level" message
+							Say(WeakPC, Msg);
+							return;
+						}
+						FZSMenuPage Confirm;
+						Confirm.Title = NSLOCTEXT("ZS", "PrConfirmTitle", "PRESTIGE?");
+						Confirm.Refresh = [WeakPC](FZSMenuPage& C)
+						{
+							const UZSProfileSubsystem* Q = ProfileOf(WeakPC);
+							if (!Q) { return; }
+							C.Subtitle = FText::Format(NSLOCTEXT("ZS", "PrConfirmSub", "Rank {0} ({1}). Level resets to 1. Weapons, cash, outfits and unlocks are kept."),
+								FText::AsNumber(Q->GetPrestige() + 1), UZSProfileSubsystem::PrestigeTier(Q->GetPrestige() + 1));
+							C.Items.Reset();
+							C.Items.Emplace(NSLOCTEXT("ZS", "PrConfirm", "CONFIRM PRESTIGE"), [WeakPC]()
+							{
+								UZSProfileSubsystem* Z = ProfileOf(WeakPC);
+								if (!Z || !WeakPC.IsValid()) { return; }
+								FText Msg;
+								Z->DoPrestige(Msg);
+								WeakPC->PopMenu();
+								Say(WeakPC, Msg);
+							});
+							C.Items.Add(BackItem(WeakPC));
+						};
+						WeakPC->PushMenu(Confirm);
+					}, Value, Detail);
+				}
+			}
 			const FText RuleText = NSLOCTEXT("ZS", "MissionRule", "Progress made during a run only counts if you WIN the run (kill the round-20 boss). Die or abandon and that run's progress is lost. Rewards are paid automatically.");
 			for (const FZSMissionStatus& St : Missions->GetActive())
 			{

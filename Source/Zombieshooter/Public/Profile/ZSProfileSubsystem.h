@@ -59,6 +59,26 @@ public:
 	/** Rotating (non-starter) weapons in stock each day. */
 	static constexpr int32 DailyWeaponSlots = 3;
 
+	// ---- Prestige (Milestone 13): an additive long-tail track, never a wipe ----
+	static constexpr int32 MaxPrestige = 25;
+	/** After the first prestige, climbing back to max level needs this fraction of the normal XP. */
+	static constexpr float PrestigeXPScale = 0.6f;
+	static constexpr float PrestigeBonusPerRank = 0.02f;
+	static constexpr float MaxPrestigeBonus = 0.4f;
+	int32 GetPrestige() const;
+	/** Level used for every unlock check: once you have prestiged, everything earned stays unlocked. */
+	int32 GetUnlockLevel() const;
+	bool CanPrestige() const;
+	/** Level back to 1, rank +1, cash payout. Inventory, cash, outfits and unlocks are kept. */
+	bool DoPrestige(FText& OutMessage);
+	/** Permanent XP / cash bonus on banked (won) runs, e.g. 0.06 at rank 3. */
+	float GetPrestigeBonus() const;
+	static int32 PrestigeCashReward(int32 Rank) { return 2500 * Rank; }
+	static FText PrestigeTier(int32 Rank);
+	static FLinearColor PrestigeColor(int32 Rank);
+	/** What reaching this rank grants (confirm page). */
+	static TArray<FText> PrestigeRewards(int32 Rank);
+
 	// ---- Queries ----
 	int32 GetLevel() const;
 	int32 GetLevelXP() const;
@@ -124,6 +144,7 @@ public:
 	void ResetProfile();
 	void GiveCash(int64 Amount);
 	void GiveXP(int32 Amount);
+	void SetPrestigeDebug(int32 Rank);
 
 	void Save();
 

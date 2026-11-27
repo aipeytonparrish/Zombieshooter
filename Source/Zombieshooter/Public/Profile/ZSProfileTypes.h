@@ -15,6 +15,33 @@ struct FZSInventoryWeapon
 	UPROPERTY(SaveGame, BlueprintReadOnly, Category = "Inventory") TArray<FName> Attachments;
 };
 
+/** One of the 5 loadout presets: a primary and a sidearm (instance ids into the inventory). */
+USTRUCT(BlueprintType)
+struct FZSLoadout
+{
+	GENERATED_BODY()
+
+	UPROPERTY(SaveGame, BlueprintReadOnly, Category = "Loadout") FString Name;
+	UPROPERTY(SaveGame, BlueprintReadOnly, Category = "Loadout") FGuid Primary;
+	UPROPERTY(SaveGame, BlueprintReadOnly, Category = "Loadout") FGuid Secondary;
+};
+
+/** The player's look (Milestone 9). Never lost on a failed run. */
+USTRUCT(BlueprintType)
+struct FZSCharacterLook
+{
+	GENERATED_BODY()
+
+	/** Survivor body 0..N-1 (ZSCharacterCatalog). */
+	UPROPERTY(SaveGame, BlueprintReadOnly, Category = "Character") int32 Body = 0;
+	/** First-person arms / gloves set. */
+	UPROPERTY(SaveGame, BlueprintReadOnly, Category = "Character") int32 Arms = 0;
+	/** Index into the tint palette (0 = none). */
+	UPROPERTY(SaveGame, BlueprintReadOnly, Category = "Character") int32 Tint = 0;
+	/** Arms follow the body's outfit automatically. */
+	UPROPERTY(SaveGame, BlueprintReadOnly, Category = "Character") bool bMatchArms = true;
+};
+
 UENUM(BlueprintType)
 enum class EZSRunOutcome : uint8
 {

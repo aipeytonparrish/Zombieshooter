@@ -110,6 +110,10 @@ struct FZSWeaponPart
 	/** Part moves with the reload (drops out and back in). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Part")
 	bool bIsMagazine = false;
+
+	/** Only shown when this attachment id is fitted (None = always shown). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Part")
+	FName RequiredAttachment;
 };
 
 /** A sound at a point (0..1) of a reload, for weapons whose animations carry no sound events. */

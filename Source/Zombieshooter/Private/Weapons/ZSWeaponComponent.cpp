@@ -1,4 +1,6 @@
 #include "Weapons/ZSWeaponComponent.h"
+#include "Bunker/ZSBunkerGameMode.h"
+#include "Weapons/ZSWeaponCatalog.h"
 #include "Weapons/ZSWeaponBase.h"
 #include "Weapons/ZSWeapon_RD704.h"
 #include "Weapons/ZSWeapon_TacticalAR.h"
@@ -115,29 +117,44 @@ void UZSWeaponComponent::SpawnDefaultWeapons()
 		return;
 	}
 
-	// Survival: the profile's deployed loadout. Sandbox: the default test weapons.
-	TArray<TSubclassOf<AZSWeaponBase>> ToSpawn = DefaultWeapons;
-	if (AZSGameMode_Survival* GM = World->GetAuthGameMode<AZSGameMode_Survival>())
+	// Survival: the profile's deployed loadout (with attachments). Bunker: nothing. Sandbox: the default test weapons.
+	TArray<TPair<TSubclassOf<AZSWeaponBase>, TArray<FName>>> ToSpawn;
+	for (const TSubclassOf<AZSWeaponBase>& Class : DefaultWeapons)
 	{
-		const TArray<TSubclassOf<AZSWeaponBase>> Deployed = GM->GetDeployedWeaponClasses();
+		ToSpawn.Emplace(Class, TArray<FName>());
+	}
+	if (World->GetAuthGameMode<AZSBunkerGameMode>())
+	{
+		ToSpawn.Reset();
+	}
+	else if (AZSGameMode_Survival* GM = World->GetAuthGameMode<AZSGameMode_Survival>())
+	{
+		const TArray<FZSInventoryWeapon> Deployed = GM->GetDeployedWeapons();
 		if (Deployed.Num() > 0)
 		{
-			ToSpawn = Deployed;
+			ToSpawn.Reset();
+			for (const FZSInventoryWeapon& W : Deployed)
+			{
+				if (const ZSWeaponCatalog::FEntry* E = ZSWeaponCatalog::Find(W.ItemId))
+				{
+					ToSpawn.Emplace(E->Class, W.Attachments);
+				}
+			}
 		}
 	}
 
-	for (const TSubclassOf<AZSWeaponBase>& Class : ToSpawn)
+	for (const TPair<TSubclassOf<AZSWeaponBase>, TArray<FName>>& Entry : ToSpawn)
 	{
-		if (!Class)
+		if (!Entry.Key)
 		{
 			continue;
 		}
-		FActorSpawnParameters Params;
-		Params.Owner = Char;
-		Params.Instigator = Char;
-		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		if (AZSWeaponBase* Weapon = World->SpawnActor<AZSWeaponBase>(Class, FTransform::Identity, Params))
+		AZSWeaponBase* Weapon = World->SpawnActorDeferred<AZSWeaponBase>(Entry.Key, FTransform::Identity, Char, Char,
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+		if (Weapon)
 		{
+			Weapon->Attachments = Entry.Value;
+			Weapon->FinishSpawning(FTransform::Identity);
 			Weapon->AttachToComponent(ViewModelRoot, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 			Weapon->SetWeaponVisible(false);
 			Weapons.Add(Weapon);

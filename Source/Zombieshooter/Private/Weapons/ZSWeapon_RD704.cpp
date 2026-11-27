@@ -77,11 +77,12 @@ AZSWeapon_RD704::AZSWeapon_RD704()
 	const FLinearColor Dark(0.04f, 0.04f, 0.045f);
 	const FLinearColor Tan(0.25f, 0.2f, 0.13f);
 
-	auto AddPart = [&](const TCHAR* Name, bool bMag, const FVector& BoxMin, const FVector& BoxMax, const FLinearColor& Color)
+	auto AddPart = [&](const TCHAR* Name, bool bMag, const FVector& BoxMin, const FVector& BoxMax, const FLinearColor& Color, FName Requires = NAME_None)
 	{
 		FZSWeaponPart P = MakeBoxPart(FName(Name), BoxMin, BoxMax, Color, bMag);
 		P.Mesh = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(FString::Printf(TEXT("/Game/ZS_Imported/Weapons/RD704/SM_RD704_%s.SM_RD704_%s"), Name, Name)));
 		P.Offset = ToWeaponSpace;
+		P.RequiredAttachment = Requires;
 		S.Parts.Add(P);
 	};
 
@@ -94,6 +95,8 @@ AZSWeapon_RD704::AZSWeapon_RD704()
 	AddPart(TEXT("MagAmmo"),     true,  FVector(-1.f, -1.f, 8.f),    FVector(1.f, 1.f, 9.f), Tan);
 	AddPart(TEXT("Scope"),       false, FVector(-20.5f, -2.5f, 16.5f), FVector(-6.f, 2.5f, 22.f), Dark);
 	AddPart(TEXT("Reticle"),     false, FVector(-19.6f, -0.2f, 19.6f), FVector(-19.4f, 0.2f, 20.f), FLinearColor::Red);
-	AddPart(TEXT("ForeGrip"),    false, FVector(14.6f, -1.5f, 2.6f), FVector(19.2f, 1.5f, 9.f), Dark);
-	AddPart(TEXT("MuzzleBrake"), false, FVector(29.f, -1.6f, 10.2f), FVector(34.7f, 1.6f, 13.4f), Dark);
+	// Attachment parts (only shown when bought for this gun).
+	AddPart(TEXT("ForeGrip"),    false, FVector(14.6f, -1.5f, 2.6f), FVector(19.2f, 1.5f, 9.f), Dark, TEXT("UB_VGRIP"));
+	AddPart(TEXT("MuzzleBrake"), false, FVector(29.f, -1.6f, 10.2f), FVector(34.7f, 1.6f, 13.4f), Dark, TEXT("MUZ_BRAKE"));
+	AddPart(TEXT("Suppressor"),  false, FVector(29.f, -2.f, 9.6f),   FVector(48.f, 2.f, 14.f), Dark, TEXT("MUZ_SUPPRESSOR"));
 }

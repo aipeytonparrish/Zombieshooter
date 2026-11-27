@@ -39,8 +39,8 @@ public:
 	/** Seconds the results screen waits before continuing on its own. */
 	UPROPERTY(EditDefaultsOnly, Category = "ZS|Survival") float ResultsAutoContinue = 60.f;
 
-	/** Weapons to give the player: the deployed loadout (deploys the run the first time it's asked). */
-	TArray<TSubclassOf<AZSWeaponBase>> GetDeployedWeaponClasses();
+	/** Weapons to give the player: the deployed loadout with attachments (deploys the run the first time it's asked). */
+	TArray<FZSInventoryWeapon> GetDeployedWeapons();
 
 	// ---- Called by the round manager ----
 	void RewardKill(AZSZombieBase* Zombie, bool bHeadshot);
@@ -51,7 +51,7 @@ public:
 	/** Pause menu: give up (counts as a fail). */
 	void AbandonRun();
 	void EndRun(EZSRunOutcome Outcome);
-	/** Continue from the results screen (restarts the map; returns to the bunker in Milestone 7). */
+	/** Continue from the results screen: back to the bunker (or restarts the map if there is no bunker map). */
 	void RestartRun();
 	bool IsRunOver() const { return bRunEnded; }
 
@@ -71,5 +71,5 @@ private:
 	float ResultsTimer = -1.f;
 	float LastKillTime = -10.f;
 	int32 KillStreak = 0;
-	TArray<FName> DeployedIds;
+	TArray<FZSInventoryWeapon> Deployed;
 };

@@ -20,6 +20,7 @@
 #include "Rounds/ZSGameState_Survival.h"
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
+#include "Bunker/ZSBunkerMenus.h"
 #include "Zombieshooter.h"
 
 AZSPlayerController::AZSPlayerController()
@@ -217,6 +218,37 @@ void AZSPlayerController::StartAutoShotIfRequested()
 			GetWorldTimerManager().SetTimer(TeleportTimer, FTimerDelegate::CreateWeakLambda(this, [this, Where]() { if (APawn* P = GetPawn()) { const bool bOk = P->TeleportTo(Where, P->GetActorRotation()); UE_LOG(LogZS, Warning, TEXT("Teleport %s -> %s"), bOk ? TEXT("ok") : TEXT("FAILED"), *P->GetActorLocation().ToCompactString()); } }), 0.7f, false);
 		}
 	}
+	// Bunker menus: -ZSAutoMenu=Map|Armory|Market|Character|Missions [-ZSAutoMenuKeys=DDC] (D down, U up, C confirm, B back).
+	int32 AutoCash = 0;
+	if (FParse::Value(Cmd, TEXT("ZSAutoCash="), AutoCash)) { ZSGiveCash(AutoCash); }
+	int32 AutoXP = 0;
+	if (FParse::Value(Cmd, TEXT("ZSAutoXP="), AutoXP)) { ZSGiveXP(AutoXP); }
+	FString AutoMenu;
+	if (FParse::Value(Cmd, TEXT("ZSAutoMenu="), AutoMenu))
+	{
+		FString Keys;
+		FParse::Value(Cmd, TEXT("ZSAutoMenuKeys="), Keys);
+		FTimerHandle MenuTimer;
+		GetWorldTimerManager().SetTimer(MenuTimer, FTimerDelegate::CreateWeakLambda(this, [this, AutoMenu, Keys]()
+		{
+			static const TMap<FString, EZSStationType> Names = { { TEXT("Map"), EZSStationType::MapTable }, { TEXT("Armory"), EZSStationType::Armory },
+				{ TEXT("Market"), EZSStationType::Market }, { TEXT("Character"), EZSStationType::Character }, { TEXT("Missions"), EZSStationType::Missions } };
+			if (const EZSStationType* T = Names.Find(AutoMenu)) { ZSBunkerMenus::Open(this, *T); }
+			for (const TCHAR K : Keys)
+			{
+				const FInputActionValue V;
+				switch (K)
+				{
+				case 'D': Input_MenuDown(V); break;
+				case 'U': Input_MenuUp(V); break;
+				case 'C': Input_MenuConfirm(V); break;
+				case 'B': Input_MenuBack(V); break;
+				default: break;
+				}
+			}
+		}), 1.5f, false);
+	}
+
 	if (FParse::Param(Cmd, TEXT("ZSAutoWin")) || FParse::Param(Cmd, TEXT("ZSAutoAbandon")) || FParse::Param(Cmd, TEXT("ZSAutoPause")))
 	{
 		const bool bWin = FParse::Param(Cmd, TEXT("ZSAutoWin"));
@@ -227,7 +259,7 @@ void AZSPlayerController::StartAutoShotIfRequested()
 			ZSProfile();
 			if (bWin) { ZSWinRun(); }
 			else if (bAbandon) { if (AZSGameMode_Survival* GM = GetWorld()->GetAuthGameMode<AZSGameMode_Survival>()) { GM->AbandonRun(); } }
-			else { SetPauseMenuOpen(true); PauseMenuIndex = 1; }
+			else { OpenPauseMenu(); if (MenuStack.Num() > 0) { MenuStack.Last().Index = 1; } }
 			ZSProfile();
 		}), 2.f, false);
 	}
@@ -384,24 +416,95 @@ void AZSPlayerController::ZSZombieInfo()
 
 // ---- Pause menu / results input --------------------------------------------------------------
 
-TArray<FText> AZSPlayerController::GetPauseMenuItems() const
+void AZSPlayerController::PushMenu(const FZSMenuPage& Page)
 {
-	TArray<FText> Items;
-	Items.Add(NSLOCTEXT("ZS", "Pause_Resume", "RESUME"));
-	if (GetWorld()->GetAuthGameMode<AZSGameMode_Survival>())
+	FZSMenuPage& P = MenuStack.Add_GetRef(Page);
+	if (P.Refresh)
 	{
-		Items.Add(bConfirmAbandon ? NSLOCTEXT("ZS", "Pause_AbandonConfirm", "CONFIRM ABANDON (deployed gear is lost)") : NSLOCTEXT("ZS", "Pause_Abandon", "ABANDON RUN"));
+		P.Refresh(P);
 	}
-	Items.Add(NSLOCTEXT("ZS", "Pause_Quit", "QUIT GAME"));
-	return Items;
+	P.Index = FMath::Clamp(P.Index, 0, FMath::Max(0, P.Items.Num() - 1));
+	ApplyMenuInputMode();
 }
 
-void AZSPlayerController::SetPauseMenuOpen(bool bOpen)
+void AZSPlayerController::PopMenu()
 {
-	bPauseMenuOpen = bOpen;
-	PauseMenuIndex = 0;
+	if (MenuStack.Num() > 0)
+	{
+		MenuStack.Pop();
+		if (MenuStack.Num() > 0 && MenuStack.Last().Refresh)
+		{
+			MenuStack.Last().Refresh(MenuStack.Last());
+		}
+	}
+	ApplyMenuInputMode();
+}
+
+void AZSPlayerController::CloseAllMenus()
+{
+	MenuStack.Reset();
 	bConfirmAbandon = false;
-	SetPause(bOpen);
+	ApplyMenuInputMode();
+}
+
+void AZSPlayerController::ApplyMenuInputMode()
+{
+	const bool bOpen = MenuStack.Num() > 0;
+	const bool bPause = bOpen && MenuStack[0].bPausesGame;
+	SetPause(bPause);
+	if (APawn* P = GetPawn())
+	{
+		if (bOpen) { P->DisableInput(this); }
+		else
+		{
+			const AZSGameState_Survival* GS = GetWorld()->GetGameState<AZSGameState_Survival>();
+			const bool bRunOver = GS && GS->bShowResults;
+			if (!bRunOver) { P->EnableInput(this); }
+		}
+	}
+}
+
+void AZSPlayerController::OpenPauseMenu()
+{
+	if (IsMenuOpen())
+	{
+		return;
+	}
+	FZSMenuPage Page;
+	Page.Title = NSLOCTEXT("ZS", "Paused", "PAUSED");
+	Page.bPausesGame = true;
+	TWeakObjectPtr<AZSPlayerController> WeakThis(this);
+	Page.Refresh = [WeakThis](FZSMenuPage& P)
+	{
+		AZSPlayerController* PC = WeakThis.Get();
+		if (!PC) { return; }
+		P.Items.Reset();
+		P.Items.Emplace(NSLOCTEXT("ZS", "Pause_Resume", "RESUME"), [WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseAllMenus(); } });
+		AZSGameMode_Survival* GM = PC->GetWorld()->GetAuthGameMode<AZSGameMode_Survival>();
+		if (GM && !GM->IsRunOver())
+		{
+			P.Items.Emplace(PC->bConfirmAbandon ? NSLOCTEXT("ZS", "Pause_AbandonConfirm", "CONFIRM ABANDON") : NSLOCTEXT("ZS", "Pause_Abandon", "ABANDON RUN"),
+				[WeakThis]()
+				{
+					AZSPlayerController* Me = WeakThis.Get();
+					if (!Me) { return; }
+					if (!Me->bConfirmAbandon) { Me->bConfirmAbandon = true; return; }   // ask twice
+					Me->CloseAllMenus();
+					if (AZSGameMode_Survival* M = Me->GetWorld()->GetAuthGameMode<AZSGameMode_Survival>()) { M->AbandonRun(); }
+				},
+				FText::GetEmpty(), NSLOCTEXT("ZS", "Pause_AbandonDetail", "Counts as a failed run: your deployed gear and everything earned this run are lost."));
+		}
+		P.Items.Emplace(NSLOCTEXT("ZS", "Pause_Quit", "QUIT GAME"), [WeakThis]()
+		{
+			AZSPlayerController* Me = WeakThis.Get();
+			if (!Me) { return; }
+			// Quitting mid-run is a fail (same as the force-quit rule), so settle it first.
+			if (AZSGameMode_Survival* M = Me->GetWorld()->GetAuthGameMode<AZSGameMode_Survival>(); M && !M->IsRunOver()) { M->AbandonRun(); }
+			Me->ConsoleCommand(TEXT("quit"));
+		});
+	};
+	bConfirmAbandon = false;
+	PushMenu(Page);
 }
 
 void AZSPlayerController::Input_Pause(const FInputActionValue& Value)
@@ -411,13 +514,13 @@ void AZSPlayerController::Input_Pause(const FInputActionValue& Value)
 	{
 		return;
 	}
-	SetPauseMenuOpen(!bPauseMenuOpen);
+	if (IsMenuOpen()) { CloseAllMenus(); } else { OpenPauseMenu(); }
 }
 
 void AZSPlayerController::Input_MenuConfirm(const FInputActionValue& Value)
 {
 	// Results screen: continue.
-	if (const AZSGameState_Survival* GS = GetWorld()->GetGameState<AZSGameState_Survival>(); GS && GS->bShowResults)
+	if (const AZSGameState_Survival* GS = GetWorld()->GetGameState<AZSGameState_Survival>(); GS && GS->bShowResults && !IsMenuOpen())
 	{
 		if (AZSGameMode_Survival* GM = GetWorld()->GetAuthGameMode<AZSGameMode_Survival>())
 		{
@@ -425,74 +528,62 @@ void AZSPlayerController::Input_MenuConfirm(const FInputActionValue& Value)
 		}
 		return;
 	}
-	if (bPauseMenuOpen)
+	if (MenuStack.Num() == 0)
 	{
-		ActivatePauseItem(PauseMenuIndex);
+		return;
+	}
+	const int32 Depth = MenuStack.Num();
+	FZSMenuPage& Top = MenuStack.Last();
+	if (!Top.Items.IsValidIndex(Top.Index) || !Top.Items[Top.Index].bEnabled)
+	{
+		return;
+	}
+	const TFunction<void()> Action = Top.Items[Top.Index].OnSelect;   // copy: the callback may change the stack
+	if (Action)
+	{
+		Action();
+	}
+	// Refresh the page that is now on top (if the callback didn't close / replace it).
+	if (MenuStack.Num() > 0 && MenuStack.Num() <= Depth && MenuStack.Last().Refresh)
+	{
+		FZSMenuPage& Now = MenuStack.Last();
+		Now.Refresh(Now);
+		Now.Index = FMath::Clamp(Now.Index, 0, FMath::Max(0, Now.Items.Num() - 1));
 	}
 }
 
 void AZSPlayerController::Input_MenuBack(const FInputActionValue& Value)
 {
-	if (bPauseMenuOpen)
+	if (bConfirmAbandon)
 	{
-		if (bConfirmAbandon)
-		{
-			bConfirmAbandon = false;
-		}
-		else
-		{
-			SetPauseMenuOpen(false);
-		}
+		bConfirmAbandon = false;
+		if (MenuStack.Num() > 0 && MenuStack.Last().Refresh) { MenuStack.Last().Refresh(MenuStack.Last()); }
+		return;
+	}
+	if (MenuStack.Num() > 0)
+	{
+		PopMenu();
 	}
 }
 
 void AZSPlayerController::Input_MenuUp(const FInputActionValue& Value)
 {
-	if (bPauseMenuOpen)
+	if (MenuStack.Num() > 0 && MenuStack.Last().Items.Num() > 0)
 	{
-		const int32 Num = GetPauseMenuItems().Num();
-		PauseMenuIndex = (PauseMenuIndex + Num - 1) % Num;
-		bConfirmAbandon = false;
+		FZSMenuPage& P = MenuStack.Last();
+		P.Index = (P.Index + P.Items.Num() - 1) % P.Items.Num();
+		if (bConfirmAbandon) { bConfirmAbandon = false; if (P.Refresh) { P.Refresh(P); } }
 	}
 }
 
 void AZSPlayerController::Input_MenuDown(const FInputActionValue& Value)
 {
-	if (bPauseMenuOpen)
+	if (MenuStack.Num() > 0 && MenuStack.Last().Items.Num() > 0)
 	{
-		const int32 Num = GetPauseMenuItems().Num();
-		PauseMenuIndex = (PauseMenuIndex + 1) % Num;
-		bConfirmAbandon = false;
+		FZSMenuPage& P = MenuStack.Last();
+		P.Index = (P.Index + 1) % P.Items.Num();
+		if (bConfirmAbandon) { bConfirmAbandon = false; if (P.Refresh) { P.Refresh(P); } }
 	}
-}
-
-void AZSPlayerController::ActivatePauseItem(int32 Index)
-{
-	AZSGameMode_Survival* GM = GetWorld()->GetAuthGameMode<AZSGameMode_Survival>();
-	const bool bSurvival = GM != nullptr;
-	if (Index == 0)
-	{
-		SetPauseMenuOpen(false);
-		return;
-	}
-	if (bSurvival && Index == 1)
-	{
-		// Abandoning is a fail: ask twice.
-		if (!bConfirmAbandon)
-		{
-			bConfirmAbandon = true;
-			return;
-		}
-		SetPauseMenuOpen(false);
-		GM->AbandonRun();
-		return;
-	}
-	// Quit: quitting mid-run counts as a fail (same as the force-quit rule), so settle it first.
-	if (bSurvival && !GM->IsRunOver())
-	{
-		GM->AbandonRun();
-	}
-	ConsoleCommand(TEXT("quit"));
 }
 
 // ---- Profile debug --------------------------------------------------------------------------

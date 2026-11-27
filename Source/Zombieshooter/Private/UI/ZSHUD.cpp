@@ -10,10 +10,13 @@
 #include "Engine/LocalPlayer.h"
 #include "Player/ZSPlayerController.h"
 #include "Engine/Canvas.h"
+#include "CanvasItem.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
+#include "Bunker/ZSBunkerGameMode.h"
+#include "Profile/ZSProfileSubsystem.h"
 
 namespace
 {
@@ -45,9 +48,17 @@ void AZSHUD::DrawHUD()
 	// Everything is authored for 1080p and scaled to the actual resolution.
 	const float Scale = Canvas->ClipY / 1080.f;
 	const AZSGameState_Survival* GS = GetWorld()->GetGameState<AZSGameState_Survival>();
-	if (Char)
+	AZSBunkerGameMode* Bunker = GetWorld()->GetAuthGameMode<AZSBunkerGameMode>();
+	if (Char && !Bunker)
 	{
 		DrawHealth(Char, Scale);
+	}
+	if (Bunker)
+	{
+		DrawBunker(Bunker, Scale);
+	}
+	if (Char)
+	{
 		DrawInteractPrompt(Char, Scale);
 	}
 	DrawToasts(Scale);
@@ -414,6 +425,60 @@ void AZSHUD::DrawSurvival(const AZSGameState_Survival* GS, const AZSPlayerCharac
 	DrawPauseMenu(Scale);
 }
 
+void AZSHUD::DrawBunker(AZSBunkerGameMode* GM, float Scale)
+{
+	const UZSProfileSubsystem* Profile = UZSProfileSubsystem::Get(this);
+	const AZSPlayerController* PC = Cast<AZSPlayerController>(GetOwningPlayerController());
+	if (!Profile || (PC && PC->IsMenuOpen()))
+	{
+		return;
+	}
+	UFont* Font = GEngine->GetMediumFont();
+	const float X = 70.f * Scale;
+	float Y = 50.f * Scale;
+	auto Line = [&](const FString& Text, float TextScale, const FLinearColor& Color)
+	{
+		DrawText(Text, HudShadow, X + 2.f, Y + 2.f, Font, TextScale * Scale);
+		DrawText(Text, Color, X, Y, Font, TextScale * Scale);
+		Y += 30.f * TextScale * Scale;
+	};
+	Line(TEXT("THE BUNKER"), 1.8f, HeadGold);
+	Line(FString::Printf(TEXT("LEVEL %d"), Profile->GetLevel()), 1.4f, HudWhite);
+
+	// XP bar.
+	const float BarW = 320.f * Scale, BarH = 8.f * Scale;
+	const float Pct = FMath::Clamp(static_cast<float>(Profile->GetLevelXP()) / FMath::Max(1, Profile->GetXPToNextLevel()), 0.f, 1.f);
+	FCanvasTileItem Back(FVector2D(X, Y), FVector2D(BarW, BarH), FLinearColor(0.f, 0.f, 0.f, 0.5f));
+	Back.BlendMode = SE_BLEND_Translucent;
+	Canvas->DrawItem(Back);
+	FCanvasTileItem Fill(FVector2D(X, Y), FVector2D(BarW * Pct, BarH), FLinearColor(0.95f, 0.75f, 0.25f, 0.95f));
+	Fill.BlendMode = SE_BLEND_Translucent;
+	Canvas->DrawItem(Fill);
+	Y += 16.f * Scale;
+	Line(FString::Printf(TEXT("%d / %d XP"), Profile->GetLevelXP(), Profile->GetXPToNextLevel()), 1.f, FLinearColor(0.8f, 0.8f, 0.8f, 0.9f));
+	Line(FString::Printf(TEXT("$%lld"), Profile->GetCash()), 1.8f, FLinearColor(0.55f, 0.95f, 0.45f, 0.95f));
+
+	FString Loadout;
+	for (const FText& N : Profile->GetLoadoutNames())
+	{
+		Loadout += (Loadout.IsEmpty() ? TEXT("") : TEXT(" / ")) + N.ToString();
+	}
+	Line(FString::Printf(TEXT("LOADOUT %d:  %s"), Profile->GetActiveLoadoutIndex() + 1, Loadout.IsEmpty() ? TEXT("(empty)") : *Loadout), 1.1f, HudWhite);
+
+	// Small dot so stations are easy to aim at.
+	FCanvasTileItem Dot(FVector2D(Canvas->ClipX * 0.5f - 2.f * Scale, Canvas->ClipY * 0.5f - 2.f * Scale), FVector2D(4.f * Scale, 4.f * Scale), HudWhite);
+	Dot.BlendMode = SE_BLEND_Translucent;
+	Canvas->DrawItem(Dot);
+
+	DrawCentered(TEXT("Walk up to a station and press Interact.  Deploy from the MAP TABLE."), Canvas->ClipY - 70.f * Scale, Font, 1.1f * Scale, FLinearColor(0.85f, 0.85f, 0.85f, 0.8f));
+
+	if (GM->NoticeTime > 0.f)
+	{
+		GM->NoticeTime -= GetWorld()->GetDeltaSeconds();
+		DrawCentered(GM->Notice.ToString(), Canvas->ClipY * 0.3f, Font, 1.3f * Scale, HeadGold);
+	}
+}
+
 void AZSHUD::DrawRunEconomy(const AZSGameState_Survival* GS, float Scale)
 {
 	UFont* Small = GEngine->GetMediumFont();
@@ -543,23 +608,84 @@ void AZSHUD::DrawResults(const AZSGameState_Survival* GS, float Scale)
 void AZSHUD::DrawPauseMenu(float Scale)
 {
 	const AZSPlayerController* PC = Cast<AZSPlayerController>(GetOwningPlayerController());
-	if (!PC || !PC->IsPauseMenuOpen())
+	const FZSMenuPage* Page = PC ? PC->GetTopMenu() : nullptr;
+	if (!Page)
 	{
 		return;
 	}
 	UFont* Big = GEngine->GetLargeFont();
 	UFont* Small = GEngine->GetMediumFont();
-	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.65f), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
-	float Y = Canvas->ClipY * 0.3f;
-	DrawCentered(TEXT("PAUSED"), Y, Big, 3.f * Scale, HudWhite);
-	Y += 110.f * Scale;
-	const TArray<FText> Items = PC->GetPauseMenuItems();
-	for (int32 i = 0; i < Items.Num(); ++i)
+	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.68f), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
+
+	// Left: title + list. Right: detail of the highlighted item.
+	const float ListX = Canvas->ClipX * 0.12f;
+	const float ListW = Canvas->ClipX * 0.42f;
+	float Y = Canvas->ClipY * 0.14f;
+	DrawText(Page->Title.ToString(), HudShadow, ListX + 2.f, Y + 2.f, Big, 2.6f * Scale);
+	DrawText(Page->Title.ToString(), HudWhite, ListX, Y, Big, 2.6f * Scale);
+	Y += 80.f * Scale;
+	if (!Page->Subtitle.IsEmpty())
 	{
-		const bool bSel = i == PC->GetPauseMenuIndex();
-		const FString Text = bSel ? FString::Printf(TEXT(">  %s  <"), *Items[i].ToString()) : Items[i].ToString();
-		DrawCentered(Text, Y, Small, (bSel ? 1.7f : 1.4f) * Scale, bSel ? HeadGold : FLinearColor(0.8f, 0.8f, 0.8f, 1.f));
-		Y += 50.f * Scale;
+		DrawText(Page->Subtitle.ToString(), FLinearColor(0.75f, 0.75f, 0.75f, 1.f), ListX, Y, Small, 1.15f * Scale);
+		Y += 40.f * Scale;
 	}
-	DrawCentered(TEXT("D-pad / arrows to choose     A / Enter to select     B / Backspace to go back"), Canvas->ClipY * 0.85f, Small, 1.05f * Scale, FLinearColor(0.7f, 0.7f, 0.7f, 1.f));
+
+	// Scroll so the selection stays visible.
+	const int32 MaxRows = 11;
+	const int32 First = FMath::Clamp(Page->Index - MaxRows / 2, 0, FMath::Max(0, Page->Items.Num() - MaxRows));
+	for (int32 i = First; i < FMath::Min(Page->Items.Num(), First + MaxRows); ++i)
+	{
+		const FZSMenuItem& Item = Page->Items[i];
+		const bool bSel = i == Page->Index;
+		const float RowH = 44.f * Scale;
+		if (bSel)
+		{
+			DrawRect(FLinearColor(1.f, 0.8f, 0.2f, 0.18f), ListX - 12.f * Scale, Y - 4.f * Scale, ListW + 24.f * Scale, RowH - 4.f * Scale);
+		}
+		FLinearColor C = !Item.bEnabled ? FLinearColor(0.45f, 0.45f, 0.45f, 1.f) : (bSel ? HeadGold : HudWhite);
+		DrawText(Item.Label.ToString(), C, ListX, Y, Small, 1.4f * Scale);
+		if (!Item.Value.IsEmpty())
+		{
+			float VW, VH;
+			GetTextSize(Item.Value.ToString(), VW, VH, Small, 1.25f * Scale);
+			DrawText(Item.Value.ToString(), Item.bEnabled ? FLinearColor(0.75f, 0.9f, 0.75f, 1.f) : C, ListX + ListW - VW, Y + 2.f * Scale, Small, 1.25f * Scale);
+		}
+		Y += RowH;
+	}
+	if (Page->Items.IsValidIndex(Page->Index) && !Page->Items[Page->Index].Detail.IsEmpty())
+	{
+		const float DX = Canvas->ClipX * 0.6f;
+		const float DY = Canvas->ClipY * 0.3f;
+		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.45f), DX - 20.f * Scale, DY - 20.f * Scale, Canvas->ClipX * 0.3f + 40.f * Scale, Canvas->ClipY * 0.4f);
+		// Simple word wrap.
+		TArray<FString> Lines;
+		Page->Items[Page->Index].Detail.ToString().ParseIntoArrayLines(Lines);
+		float LY = DY;
+		const float MaxW = Canvas->ClipX * 0.3f;
+		for (const FString& Para : Lines)
+		{
+			TArray<FString> Words;
+			Para.ParseIntoArrayWS(Words);
+			FString Line;
+			for (const FString& W : Words)
+			{
+				const FString Test = Line.IsEmpty() ? W : Line + TEXT(" ") + W;
+				float TW, TH;
+				GetTextSize(Test, TW, TH, Small, 1.15f * Scale);
+				if (TW > MaxW && !Line.IsEmpty())
+				{
+					DrawText(Line, HudWhite, DX, LY, Small, 1.15f * Scale);
+					LY += 30.f * Scale;
+					Line = W;
+				}
+				else
+				{
+					Line = Test;
+				}
+			}
+			DrawText(Line, HudWhite, DX, LY, Small, 1.15f * Scale);
+			LY += 38.f * Scale;
+		}
+	}
+	DrawCentered(TEXT("D-pad / arrows: choose      A / Enter: select      B / Backspace: back"), Canvas->ClipY * 0.92f, Small, 1.05f * Scale, FLinearColor(0.7f, 0.7f, 0.7f, 1.f));
 }

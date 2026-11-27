@@ -13,6 +13,7 @@
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "Sound/SoundBase.h"
+#include "Weapons/ZSWeaponCatalog.h"
 #include "Zombieshooter.h"
 
 namespace ZSWeaponPaths
@@ -95,6 +96,13 @@ FZSWeaponPart AZSWeaponBase::MakeCylinderPart(FName Name, const FVector& Center,
 void AZSWeaponBase::BeginPlay()
 {
 	Super::BeginPlay();
+	for (const FName Id : Attachments)
+	{
+		if (const ZSWeaponCatalog::FAttachment* A = ZSWeaponCatalog::FindAttachment(Id); A && A->Apply)
+		{
+			A->Apply(Stats);
+		}
+	}
 	if (Stats.FireModes.Num() == 0)
 	{
 		Stats.FireModes.Add(EZSFireMode::Semi);
@@ -122,6 +130,10 @@ void AZSWeaponBase::BuildVisuals()
 
 	for (const FZSWeaponPart& Part : Stats.Parts)
 	{
+		if (!Part.RequiredAttachment.IsNone() && !Attachments.Contains(Part.RequiredAttachment))
+		{
+			continue;
+		}
 		UStaticMesh* Mesh = Part.Mesh.IsNull() ? nullptr : Part.Mesh.LoadSynchronous();
 		FTransform Offset = Part.Offset;
 		bool bPlaceholder = false;

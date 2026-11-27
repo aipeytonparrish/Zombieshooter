@@ -30,10 +30,14 @@ void UZSProfileSubsystem::Load()
 	{
 		Profile = Cast<UZSSaveGame>(UGameplayStatics::CreateSaveGameObject(UZSSaveGame::StaticClass()));
 		EnsureStarterWeapons();
+		EnsureLoadouts();
 		UE_LOG(LogZS, Log, TEXT("New profile created."));
 		Save();
 		return;
 	}
+
+	EnsureLoadouts();   // version 1 saves had a single loadout
+	Profile->Version = UZSSaveGame::CurrentVersion;
 
 	// The previous session ended mid-run: that is a fail (force quit).
 	if (Profile->bRunActive)
@@ -91,7 +95,23 @@ int32 UZSProfileSubsystem::XPToNext(int32 Level) const
 
 const FZSInventoryWeapon* UZSProfileSubsystem::FindWeapon(const FGuid& Id) const
 {
-	return Profile ? Profile->Weapons.FindByPredicate([&Id](const FZSInventoryWeapon& W) { return W.InstanceId == Id; }) : nullptr;
+	return (Profile && Id.IsValid()) ? Profile->Weapons.FindByPredicate([&Id](const FZSInventoryWeapon& W) { return W.InstanceId == Id; }) : nullptr;
+}
+
+FZSInventoryWeapon* UZSProfileSubsystem::FindWeaponMutable(const FGuid& Id)
+{
+	return const_cast<FZSInventoryWeapon*>(FindWeapon(Id));
+}
+
+const FZSCharacterLook& UZSProfileSubsystem::GetLook() const
+{
+	static FZSCharacterLook Default;
+	return Profile ? Profile->Look : Default;
+}
+
+void UZSProfileSubsystem::SetLook(const FZSCharacterLook& Look)
+{
+	if (Profile) { Profile->Look = Look; Save(); }
 }
 
 // ---- Inventory ------------------------------------------------------------------------------
@@ -125,34 +145,316 @@ TArray<FText> UZSProfileSubsystem::LoseDeployedWeapons()
 	TArray<FText> Names;
 	for (const FGuid& Id : Profile->DeployedWeapons)
 	{
-		const int32 Index = Profile->Weapons.IndexOfByPredicate([&Id](const FZSInventoryWeapon& W) { return W.InstanceId == Id; });
-		if (Index != INDEX_NONE)
+		if (FindWeapon(Id))
 		{
-			Names.Add(ZSWeaponCatalog::DisplayName(Profile->Weapons[Index].ItemId));
-			Profile->Weapons.RemoveAt(Index);
+			Names.Add(DescribeWeapon(Id));
+			Profile->Weapons.RemoveAll([&Id](const FZSInventoryWeapon& W) { return W.InstanceId == Id; });
 			Profile->Stats.WeaponsLost++;
 		}
 	}
 	Profile->DeployedWeapons.Reset();
-	if (!FindWeapon(Profile->PrimaryWeapon)) { Profile->PrimaryWeapon.Invalidate(); }
-	if (!FindWeapon(Profile->SecondaryWeapon)) { Profile->SecondaryWeapon.Invalidate(); }
+	CleanLoadouts();
+	FillEmptySlots(ActiveLoadoutRef());
 	return Names;
+}
+
+// ---- Loadouts -------------------------------------------------------------------------------
+
+void UZSProfileSubsystem::EnsureLoadouts()
+{
+	const bool bMigrate = Profile->Loadouts.Num() == 0;
+	while (Profile->Loadouts.Num() < NumLoadouts)
+	{
+		FZSLoadout& L = Profile->Loadouts.AddDefaulted_GetRef();
+		L.Name = FString::Printf(TEXT("LOADOUT %d"), Profile->Loadouts.Num());
+	}
+	Profile->Loadouts.SetNum(NumLoadouts);
+	if (bMigrate)
+	{
+		Profile->Loadouts[0].Primary = Profile->PrimaryWeapon;
+		Profile->Loadouts[0].Secondary = Profile->SecondaryWeapon;
+		for (const FZSInventoryWeapon& W : Profile->Weapons)
+		{
+			const ZSWeaponCatalog::FEntry* E = ZSWeaponCatalog::Find(W.ItemId);
+			if (!E)
+			{
+				continue;
+			}
+			FGuid& Slot = E->bPrimary ? Profile->Loadouts[0].Primary : Profile->Loadouts[0].Secondary;
+			if (!FindWeapon(Slot)) { Slot = W.InstanceId; }
+		}
+	}
+	Profile->ActiveLoadout = FMath::Clamp(Profile->ActiveLoadout, 0, NumLoadouts - 1);
+	CleanLoadouts();
+}
+
+void UZSProfileSubsystem::CleanLoadouts()
+{
+	for (FZSLoadout& L : Profile->Loadouts)
+	{
+		if (!FindWeapon(L.Primary)) { L.Primary.Invalidate(); }
+		if (!FindWeapon(L.Secondary)) { L.Secondary.Invalidate(); }
+	}
+}
+
+FZSLoadout& UZSProfileSubsystem::ActiveLoadoutRef()
+{
+	if (Profile->Loadouts.Num() != NumLoadouts)
+	{
+		EnsureLoadouts();
+	}
+	return Profile->Loadouts[Profile->ActiveLoadout];
+}
+
+int32 UZSProfileSubsystem::GetActiveLoadoutIndex() const { return Profile ? Profile->ActiveLoadout : 0; }
+
+FZSLoadout UZSProfileSubsystem::GetLoadout(int32 Index) const
+{
+	return (Profile && Profile->Loadouts.IsValidIndex(Index)) ? Profile->Loadouts[Index] : FZSLoadout();
+}
+
+void UZSProfileSubsystem::SetActiveLoadout(int32 Index)
+{
+	if (Profile && Profile->Loadouts.IsValidIndex(Index)) { Profile->ActiveLoadout = Index; Save(); }
+}
+
+bool UZSProfileSubsystem::AssignToLoadout(int32 Index, const FGuid& WeaponId)
+{
+	const FZSInventoryWeapon* W = FindWeapon(WeaponId);
+	const ZSWeaponCatalog::FEntry* E = W ? ZSWeaponCatalog::Find(W->ItemId) : nullptr;
+	if (!E || !Profile->Loadouts.IsValidIndex(Index))
+	{
+		return false;
+	}
+	FZSLoadout& L = Profile->Loadouts[Index];
+	(E->bPrimary ? L.Primary : L.Secondary) = WeaponId;
+	Save();
+	return true;
+}
+
+void UZSProfileSubsystem::ClearLoadoutSlot(int32 Index, bool bPrimary)
+{
+	if (Profile && Profile->Loadouts.IsValidIndex(Index))
+	{
+		(bPrimary ? Profile->Loadouts[Index].Primary : Profile->Loadouts[Index].Secondary).Invalidate();
+		Save();
+	}
+}
+
+FText UZSProfileSubsystem::DescribeWeapon(const FGuid& WeaponId) const
+{
+	const FZSInventoryWeapon* W = FindWeapon(WeaponId);
+	if (!W)
+	{
+		return NSLOCTEXT("ZS", "EmptySlot", "(empty)");
+	}
+	const FText Name = ZSWeaponCatalog::DisplayName(W->ItemId);
+	return W->Attachments.Num() > 0
+		? FText::Format(NSLOCTEXT("ZS", "WeaponPlus", "{0} +{1}"), Name, FText::AsNumber(W->Attachments.Num()))
+		: Name;
+}
+
+TArray<FText> UZSProfileSubsystem::GetLoadoutNames(int32 Index) const
+{
+	TArray<FText> Names;
+	if (!Profile)
+	{
+		return Names;
+	}
+	const FZSLoadout L = GetLoadout(Index < 0 ? Profile->ActiveLoadout : Index);
+	if (FindWeapon(L.Primary)) { Names.Add(DescribeWeapon(L.Primary)); }
+	if (FindWeapon(L.Secondary)) { Names.Add(DescribeWeapon(L.Secondary)); }
+	return Names;
+}
+
+// ---- Market / armory ------------------------------------------------------------------------
+
+int32 UZSProfileSubsystem::MarketDay()
+{
+	return static_cast<int32>(FDateTime::UtcNow().GetTicks() / ETimespan::TicksPerDay);
+}
+
+FTimespan UZSProfileSubsystem::TimeToMarketRefresh()
+{
+	const FDateTime Now = FDateTime::UtcNow();
+	return (Now.GetDate() + FTimespan::FromDays(1.0)) - Now;
+}
+
+TArray<FZSMarketOffer> UZSProfileSubsystem::GetMarketOffers() const
+{
+	// Seeded by the UTC day: the stock is the same all day and changes at midnight UTC.
+	FRandomStream Rng(MarketDay() * 7919 + 17);
+	TArray<FZSMarketOffer> Offers;
+	TArray<const ZSWeaponCatalog::FEntry*> Rotating;
+	for (const ZSWeaponCatalog::FEntry& E : ZSWeaponCatalog::All())
+	{
+		if (E.bStarter)
+		{
+			FZSMarketOffer& O = Offers.AddDefaulted_GetRef();
+			O.ItemId = E.ItemId;
+			O.Price = O.FullPrice = E.Price;
+			O.bStarter = true;
+		}
+		else
+		{
+			Rotating.Add(&E);
+		}
+	}
+	for (int32 i = Rotating.Num() - 1; i > 0; --i)
+	{
+		Rotating.Swap(i, Rng.RandRange(0, i));
+	}
+	for (int32 i = 0; i < FMath::Min(DailyWeaponSlots, Rotating.Num()); ++i)
+	{
+		FZSMarketOffer& O = Offers.AddDefaulted_GetRef();
+		O.ItemId = Rotating[i]->ItemId;
+		O.Price = O.FullPrice = Rotating[i]->Price;
+	}
+	if (Offers.Num() > 0)
+	{
+		FZSMarketOffer& Deal = Offers[Rng.RandRange(0, Offers.Num() - 1)];
+		Deal.bDeal = true;
+		Deal.Price = FMath::RoundToInt(Deal.FullPrice * (1.f - DealDiscount) / 10.f) * 10;
+	}
+	return Offers;
+}
+
+bool UZSProfileSubsystem::BuyWeapon(FName ItemId, FText& OutMessage)
+{
+	const ZSWeaponCatalog::FEntry* E = ZSWeaponCatalog::Find(ItemId);
+	int32 Price = -1;
+	for (const FZSMarketOffer& O : GetMarketOffers())
+	{
+		if (O.ItemId == ItemId) { Price = O.Price; }
+	}
+	if (!Profile || !E || Price < 0)
+	{
+		OutMessage = NSLOCTEXT("ZS", "NotInStock", "Not in stock today.");
+		return false;
+	}
+	if (GetLevel() < E->RequiredLevel)
+	{
+		OutMessage = FText::Format(NSLOCTEXT("ZS", "NeedLevel", "Requires level {0}."), FText::AsNumber(E->RequiredLevel));
+		return false;
+	}
+	if (Profile->Cash < Price)
+	{
+		OutMessage = FText::Format(NSLOCTEXT("ZS", "NeedCash", "Not enough cash (${0} needed)."), FText::AsNumber(Price));
+		return false;
+	}
+	if (Profile->Weapons.Num() >= MaxWeapons)
+	{
+		OutMessage = NSLOCTEXT("ZS", "InvFull", "Armory full - sell something first.");
+		return false;
+	}
+	Profile->Cash -= Price;
+	const FGuid Id = AddWeapon(ItemId);
+	FZSLoadout& L = ActiveLoadoutRef();
+	FGuid& Slot = E->bPrimary ? L.Primary : L.Secondary;
+	if (!FindWeapon(Slot)) { Slot = Id; }
+	Save();
+	OutMessage = FText::Format(NSLOCTEXT("ZS", "Bought", "Bought {0}."), E->DisplayName);
+	return true;
+}
+
+int32 UZSProfileSubsystem::GetSellPrice(const FGuid& WeaponId) const
+{
+	const FZSInventoryWeapon* W = FindWeapon(WeaponId);
+	const ZSWeaponCatalog::FEntry* E = W ? ZSWeaponCatalog::Find(W->ItemId) : nullptr;
+	if (!E)
+	{
+		return 0;
+	}
+	int32 Value = E->Price;
+	for (const FName A : W->Attachments)
+	{
+		if (const ZSWeaponCatalog::FAttachment* Att = ZSWeaponCatalog::FindAttachment(A)) { Value += Att->Price; }
+	}
+	return FMath::RoundToInt(Value * SellFraction / 10.f) * 10;
+}
+
+bool UZSProfileSubsystem::SellWeapon(const FGuid& WeaponId, FText& OutMessage)
+{
+	if (!FindWeapon(WeaponId))
+	{
+		return false;
+	}
+	const int32 Price = GetSellPrice(WeaponId);
+	OutMessage = FText::Format(NSLOCTEXT("ZS", "Sold", "Sold {0} for ${1}."), DescribeWeapon(WeaponId), FText::AsNumber(Price));
+	Profile->Cash += Price;
+	Profile->Weapons.RemoveAll([&WeaponId](const FZSInventoryWeapon& X) { return X.InstanceId == WeaponId; });
+	CleanLoadouts();
+	FillEmptySlots(ActiveLoadoutRef());
+	Save();
+	return true;
+}
+
+FText UZSProfileSubsystem::CanFitAttachment(const FGuid& WeaponId, FName AttachmentId) const
+{
+	const FZSInventoryWeapon* W = FindWeapon(WeaponId);
+	const ZSWeaponCatalog::FEntry* E = W ? ZSWeaponCatalog::Find(W->ItemId) : nullptr;
+	const ZSWeaponCatalog::FAttachment* A = ZSWeaponCatalog::FindAttachment(AttachmentId);
+	if (!E || !A || !E->Attachments.Contains(AttachmentId))
+	{
+		return NSLOCTEXT("ZS", "AttIncompatible", "Doesn't fit this gun.");
+	}
+	if (W->Attachments.Contains(AttachmentId))
+	{
+		return NSLOCTEXT("ZS", "AttFitted", "Fitted.");
+	}
+	for (const FName Other : W->Attachments)
+	{
+		const ZSWeaponCatalog::FAttachment* O = ZSWeaponCatalog::FindAttachment(Other);
+		if (O && O->Slot == A->Slot)
+		{
+			return FText::Format(NSLOCTEXT("ZS", "AttSlotTaken", "{0} slot taken by {1}."), ZSWeaponCatalog::SlotName(A->Slot), O->DisplayName);
+		}
+	}
+	if (W->Attachments.Num() >= ZSWeaponCatalog::MaxAttachments)
+	{
+		return NSLOCTEXT("ZS", "AttMax", "This gun already has 5 attachments.");
+	}
+	if (GetLevel() < A->RequiredLevel)
+	{
+		return FText::Format(NSLOCTEXT("ZS", "NeedLevel", "Requires level {0}."), FText::AsNumber(A->RequiredLevel));
+	}
+	if (GetCash() < A->Price)
+	{
+		return FText::Format(NSLOCTEXT("ZS", "NeedCash", "Not enough cash (${0} needed)."), FText::AsNumber(A->Price));
+	}
+	return FText::GetEmpty();
+}
+
+bool UZSProfileSubsystem::BuyAttachment(const FGuid& WeaponId, FName AttachmentId, FText& OutMessage)
+{
+	OutMessage = CanFitAttachment(WeaponId, AttachmentId);
+	if (!OutMessage.IsEmpty())
+	{
+		return false;
+	}
+	const ZSWeaponCatalog::FAttachment* A = ZSWeaponCatalog::FindAttachment(AttachmentId);
+	Profile->Cash -= A->Price;
+	FindWeaponMutable(WeaponId)->Attachments.Add(AttachmentId);
+	Save();
+	OutMessage = FText::Format(NSLOCTEXT("ZS", "Fitted2", "Fitted {0}."), A->DisplayName);
+	return true;
+}
+
+bool UZSProfileSubsystem::RemoveAttachment(const FGuid& WeaponId, FName AttachmentId)
+{
+	FZSInventoryWeapon* W = FindWeaponMutable(WeaponId);
+	if (W && W->Attachments.Remove(AttachmentId) > 0)
+	{
+		Save();
+		return true;
+	}
+	return false;
 }
 
 // ---- Runs -----------------------------------------------------------------------------------
 
-TArray<FName> UZSProfileSubsystem::BeginRun()
+void UZSProfileSubsystem::FillEmptySlots(FZSLoadout& L)
 {
-	if (!Profile)
-	{
-		return {};
-	}
-	if (bAutoRestockStarters)
-	{
-		EnsureStarterWeapons();
-	}
-
-	// Fill empty / invalid slots with the first owned weapon of the right kind.
 	auto PickSlot = [this](FGuid& Slot, bool bPrimary)
 	{
 		if (const FZSInventoryWeapon* W = FindWeapon(Slot))
@@ -174,15 +476,36 @@ TArray<FName> UZSProfileSubsystem::BeginRun()
 			}
 		}
 	};
-	PickSlot(Profile->PrimaryWeapon, true);
-	PickSlot(Profile->SecondaryWeapon, false);
+	PickSlot(L.Primary, true);
+	PickSlot(L.Secondary, false);
+}
+
+TArray<FZSInventoryWeapon> UZSProfileSubsystem::BeginRun()
+{
+	if (!Profile)
+	{
+		return {};
+	}
+	// Never deploy unarmed: with no weapons at all the quartermaster lends a starter sidearm (it becomes yours).
+	if (Profile->Weapons.Num() == 0)
+	{
+		for (const ZSWeaponCatalog::FEntry& E : ZSWeaponCatalog::All())
+		{
+			if (E.bStarter && !E.bPrimary) { ActiveLoadoutRef().Secondary = AddWeapon(E.ItemId); break; }
+		}
+		UE_LOG(LogZS, Log, TEXT("No weapons owned: issued a free sidearm."));
+	}
+
+	// Fill empty / invalid slots of the active preset with an owned weapon of the right kind.
+	FZSLoadout& L = ActiveLoadoutRef();
+	FillEmptySlots(L);
 
 	Profile->DeployedWeapons.Reset();
-	if (Profile->PrimaryWeapon.IsValid()) { Profile->DeployedWeapons.Add(Profile->PrimaryWeapon); }
-	if (Profile->SecondaryWeapon.IsValid()) { Profile->DeployedWeapons.Add(Profile->SecondaryWeapon); }
+	if (L.Primary.IsValid()) { Profile->DeployedWeapons.Add(L.Primary); }
+	if (L.Secondary.IsValid()) { Profile->DeployedWeapons.Add(L.Secondary); }
 	Profile->bRunActive = true;
 	Save();
-	return GetDeployedItemIds();
+	return GetDeployedWeapons();
 }
 
 bool UZSProfileSubsystem::IsRunActive() const
@@ -190,18 +513,28 @@ bool UZSProfileSubsystem::IsRunActive() const
 	return Profile && Profile->bRunActive;
 }
 
-TArray<FName> UZSProfileSubsystem::GetDeployedItemIds() const
+TArray<FZSInventoryWeapon> UZSProfileSubsystem::GetDeployedWeapons() const
 {
-	TArray<FName> Ids;
+	TArray<FZSInventoryWeapon> Out;
 	if (Profile)
 	{
 		for (const FGuid& Id : Profile->DeployedWeapons)
 		{
 			if (const FZSInventoryWeapon* W = FindWeapon(Id))
 			{
-				Ids.Add(W->ItemId);
+				Out.Add(*W);
 			}
 		}
+	}
+	return Out;
+}
+
+TArray<FName> UZSProfileSubsystem::GetDeployedItemIds() const
+{
+	TArray<FName> Ids;
+	for (const FZSInventoryWeapon& W : GetDeployedWeapons())
+	{
+		Ids.Add(W.ItemId);
 	}
 	return Ids;
 }
@@ -209,9 +542,12 @@ TArray<FName> UZSProfileSubsystem::GetDeployedItemIds() const
 TArray<FText> UZSProfileSubsystem::GetAtRiskNames() const
 {
 	TArray<FText> Names;
-	for (const FName Id : GetDeployedItemIds())
+	if (Profile)
 	{
-		Names.Add(ZSWeaponCatalog::DisplayName(Id));
+		for (const FGuid& Id : Profile->DeployedWeapons)
+		{
+			Names.Add(DescribeWeapon(Id));
+		}
 	}
 	return Names;
 }
@@ -273,6 +609,14 @@ FZSRunResult UZSProfileSubsystem::EndRun(EZSRunOutcome Outcome, const FZSRunStat
 	for (int32 L = R.LevelBefore + 1; L <= R.LevelAfter; ++L)
 	{
 		R.Unlocks.Add(FText::Format(NSLOCTEXT("ZS", "LevelUnlock", "Level {0} reached"), FText::AsNumber(L)));
+		for (const ZSWeaponCatalog::FEntry& E : ZSWeaponCatalog::All())
+		{
+			if (E.RequiredLevel == L) { R.Unlocks.Add(FText::Format(NSLOCTEXT("ZS", "UnlockWeapon", "Market: {0}"), E.DisplayName)); }
+		}
+		for (const ZSWeaponCatalog::FAttachment& A : ZSWeaponCatalog::Attachments())
+		{
+			if (A.RequiredLevel == L) { R.Unlocks.Add(FText::Format(NSLOCTEXT("ZS", "UnlockAtt", "Armory: {0}"), A.DisplayName)); }
+		}
 	}
 
 	FZSLifetimeStats& S = Profile->Stats;
@@ -306,6 +650,7 @@ void UZSProfileSubsystem::ResetProfile()
 {
 	Profile = Cast<UZSSaveGame>(UGameplayStatics::CreateSaveGameObject(UZSSaveGame::StaticClass()));
 	EnsureStarterWeapons();
+	EnsureLoadouts();
 	Save();
 }
 

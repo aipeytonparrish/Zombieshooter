@@ -108,6 +108,17 @@ Original M4 list:
 Mannequin-skeleton zombie meshes with a physics asset; anims: idle, shamble walk, run, attack (2–3), hit reacts,
 death (2–3, ragdoll takes over after); groans/attack/death sounds; blood impact Niagara + blood decal textures.
 
+### Milestone 7 — Bunker (placeholder room built from code)
+Wanted: a **bunker / underground shelter interior kit** (concrete walls, blast door, pipes, work lights, shelves,
+crates, cots), a **map table** prop (city map), a **weapon rack / workbench**, a **shop counter**, a **locker /
+mirror**, a **cork mission board**. Any modular "bunker", "shelter" or "military base interior" Fab pack works; the
+stations are separate actors, so real props can be dropped in place of the boxes.
+
+### Milestone 8 — Attachments
+Wanted: attachment meshes that fit the M4 (TFA) and RD-704: **reflex sight, suppressor, muzzle brake, vertical grip,
+extended magazine, light stock**. The RD-704 pack already provides suppressor / brake / grip (used). An attachment
+pack on the same skeleton as the TFA rifle would let the M4 show them too (stats already work).
+
 ### Later milestones
-Bunker environment (M7), city block kit (M14), character creator parts on the Mannequin skeleton (M9), all special
+City block kit (M14), character creator parts on the Mannequin skeleton (M9), all special
 zombies + gib meshes (M11), boss (M12), music + UI art (M14). Detailed specs get added here as each milestone starts.

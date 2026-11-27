@@ -345,3 +345,49 @@ level bar, level-ups and profile cash. **A / Enter** continues (restarts the run
 | `ZSGiveCash 5000` / `ZSGiveXP 10000` | Debug grants |
 | `ZSResetProfile` | Wipe the save |
 | `ZSWinRun` | End the current run as a win |
+
+## Milestone 7 — The bunker
+
+The game now **starts in the bunker** (`/Game/ZS/Maps/L_Bunker`, also the editor startup map). It's a placeholder
+concrete room (`AZSBunkerLayout` builds it from code, so the map just stores the actor) with five stations. Walk up to
+one and press **Interact** (X on controller / E):
+
+| Station | What it does |
+|---|---|
+| **MAP TABLE** | Pick a level (Training Yard now; Midtown Block and Lexington Line show as coming soon / locked by level), see what's **AT RISK**, **DEPLOY** |
+| **ARMORY** | 5 loadout presets, pick primary / sidearm, attachments, sell |
+| **MARKET** | Today's guns for sale |
+| **LOCKER** | Character creator (Milestone 9) |
+| **MISSION BOARD** | Missions (Milestone 10) |
+
+No weapons in the bunker. Top-left shows level, XP bar, cash and the active loadout. After a run, **Continue** on the
+results screen brings you back here. If the previous run was force-quit, the bunker says what was lost.
+
+**To rebuild the bunker map:** close the editor, then run `Tools/Import/run_imports.ps1` (or delete
+`Content/ZS/Maps/L_Bunker.umap` and run `create_bunker_map.py` with the editor's `-run=pythonscript`).
+To play survival directly in the editor, open `L_ZSTest` and press Play as before.
+
+## Milestone 8 — Loadouts, attachments, market
+
+- **5 loadout presets** (Armory → LOADOUT 1–5). Choose *Deploy with this loadout* to make one active. Only the active
+  one is taken on a run (and risked).
+- **Attachments are bought for one specific gun** (Armory → pick a gun). Up to 5 per gun, one per slot (optic, muzzle,
+  underbarrel, magazine, stock). They change the gun's stats (shown in the panel) and are lost with the gun. Removing
+  one scraps it. On the RD-704 the suppressor, muzzle brake and vertical grip also show on the model; the M4 uses its
+  animated pack mesh, so its attachments are stats-only for now.
+- **Market:** starters (P9, M4) are always stocked; other guns rotate daily (UTC midnight, same stock for everyone on a
+  given day) and one item is the **deal of the day** at 25 % off. Guns have unlock levels (RD-704: level 4).
+- **Sell** any gun at the armory for 40 % of what it and its attachments cost.
+- The free starter re-issue from Milestone 6 is gone: losing a gun is real now. If you own **no** weapons at all, the
+  quartermaster lends you a P9 at deploy so you can never be stuck.
+
+| Attachment | Slot | Price | Level | Effect |
+|---|---|---|---|---|
+| Reflex Sight | Optic | $450 | 2 | −12 % ADS time, a bit more zoom |
+| Suppressor | Muzzle | $700 | 3 | −10 % recoil, −15 % damage range |
+| Muzzle Brake | Muzzle | $550 | 2 | −18 % vertical recoil |
+| Vertical Grip | Underbarrel | $500 | 2 | −12 % recoil, −10 % hip spread |
+| Extended Mag | Magazine | $650 | 5 | +50 % mag, +10 % reload time |
+| Light Stock | Stock | $400 | 6 | −15 % ADS time and moving spread, +5 % recoil |
+
+Prices, levels and stats live in `Source/Zombieshooter/Private/Weapons/ZSWeaponCatalog.cpp` (DataTables later).

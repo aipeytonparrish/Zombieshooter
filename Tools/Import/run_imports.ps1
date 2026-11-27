@@ -22,3 +22,11 @@ Write-Host "== create_test_map.py"
 & $Editor $Project -run=pythonscript "-script=$(Join-Path $PSScriptRoot 'create_test_map.py')" -unattended -nullrhi -nosplash -stdout |
     Select-String -Pattern "\[ZSImport\]|Traceback|Exception" |
     ForEach-Object { $_.Line -replace '^\[[^\]]*\]\[[^\]]*\]', '' }
+
+# Bunker hub map (ours, versioned).
+$bunker = Join-Path $PSScriptRoot "..\..\Content\ZS\Maps\L_Bunker.umap"
+if (Test-Path $bunker) { Remove-Item $bunker -Force }
+Write-Host "== create_bunker_map.py"
+& $Editor $Project -run=pythonscript "-script=$(Join-Path $PSScriptRoot 'create_bunker_map.py')" -unattended -nullrhi -nosplash -stdout |
+    Select-String -Pattern "\[ZSImport\]|Traceback|Exception" |
+    ForEach-Object { $_.Line -replace '^\[[^\]]*\]\[[^\]]*\]', '' }

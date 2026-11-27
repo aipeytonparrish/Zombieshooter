@@ -9,6 +9,8 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "Core/ZSLevelCatalog.h"
+#include "Misc/PackageName.h"
 #include "Zombieshooter.h"
 
 AZSGameMode_Survival::AZSGameMode_Survival()
@@ -49,7 +51,7 @@ void AZSGameMode_Survival::EnsureDeployed()
 	bDeployed = true;
 	if (UZSProfileSubsystem* Profile = UZSProfileSubsystem::Get(this))
 	{
-		DeployedIds = Profile->BeginRun();
+		Deployed = Profile->BeginRun();
 		if (AZSGameState_Survival* GS = GetGameState<AZSGameState_Survival>())
 		{
 			GS->AtRisk = Profile->GetAtRiskNames();
@@ -57,18 +59,10 @@ void AZSGameMode_Survival::EnsureDeployed()
 	}
 }
 
-TArray<TSubclassOf<AZSWeaponBase>> AZSGameMode_Survival::GetDeployedWeaponClasses()
+TArray<FZSInventoryWeapon> AZSGameMode_Survival::GetDeployedWeapons()
 {
 	EnsureDeployed();
-	TArray<TSubclassOf<AZSWeaponBase>> Classes;
-	for (const FName Id : DeployedIds)
-	{
-		if (const ZSWeaponCatalog::FEntry* E = ZSWeaponCatalog::Find(Id))
-		{
-			Classes.Add(E->Class);
-		}
-	}
-	return Classes;
+	return Deployed;
 }
 
 // ---- Economy --------------------------------------------------------------------------------
@@ -192,6 +186,11 @@ void AZSGameMode_Survival::Tick(float DeltaSeconds)
 void AZSGameMode_Survival::RestartRun()
 {
 	ResultsTimer = -1.f;
-	// Reloads the current map with the same options (the bunker takes over in Milestone 7).
+	const FString Bunker = ZSLevelCatalog::BunkerURL();
+	if (FPackageName::DoesPackageExist(Bunker))
+	{
+		UGameplayStatics::OpenLevel(this, FName(*Bunker));
+		return;
+	}
 	GetWorld()->ServerTravel(TEXT("?Restart"), false);
 }

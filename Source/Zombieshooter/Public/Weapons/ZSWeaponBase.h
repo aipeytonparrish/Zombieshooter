@@ -54,6 +54,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ZS|Weapon")
 	FZSWeaponStats Stats;
 
+	/** Attachment ids fitted to this gun (set before BeginPlay, e.g. via SpawnActorDeferred). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "ZS|Weapon")
+	TArray<FName> Attachments;
+
 	/** Real first-person animation (used when its assets are present; see FZSWeaponAnimSet). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ZS|Weapon")
 	FZSWeaponAnimSet AnimSet;

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "UI/ZSMenu.h"
 #include "ZSPlayerController.generated.h"
 
 class UZSInputSet;
@@ -23,12 +24,17 @@ public:
 
 	bool IsMovementDebugVisible() const { return bShowMovementDebug; }
 
-	// ---- Pause menu (drawn by AZSHUD) ----
-	bool IsPauseMenuOpen() const { return bPauseMenuOpen; }
-	int32 GetPauseMenuIndex() const { return PauseMenuIndex; }
-	bool IsConfirmingAbandon() const { return bConfirmAbandon; }
-	TArray<FText> GetPauseMenuItems() const;
-	void SetPauseMenuOpen(bool bOpen);
+	// ---- Menus (drawn by AZSHUD) ----
+	/** Push a menu page (stations, pause). While any page is open the pawn ignores gameplay input. */
+	void PushMenu(const FZSMenuPage& Page);
+	void PopMenu();
+	void CloseAllMenus();
+	bool IsMenuOpen() const { return MenuStack.Num() > 0; }
+	const FZSMenuPage* GetTopMenu() const { return MenuStack.Num() > 0 ? &MenuStack.Last() : nullptr; }
+	void OpenPauseMenu();
+	/** Kept for the HUD / harness. */
+	bool IsPauseMenuOpen() const { return MenuStack.Num() > 0 && MenuStack[0].bPausesGame; }
+	void SetPauseMenuOpen(bool bOpen) { if (bOpen) { OpenPauseMenu(); } else { CloseAllMenus(); } }
 	void ToggleMovementDebug() { bShowMovementDebug = !bShowMovementDebug; }
 
 	// ---- Console commands (type in the ~ console) ----
@@ -144,9 +150,8 @@ private:
 	void Input_MenuBack(const FInputActionValue& Value);
 	void Input_MenuUp(const FInputActionValue& Value);
 	void Input_MenuDown(const FInputActionValue& Value);
-	void ActivatePauseItem(int32 Index);
+	void ApplyMenuInputMode();
 
-	bool bPauseMenuOpen = false;
-	int32 PauseMenuIndex = 0;
+	TArray<FZSMenuPage> MenuStack;
 	bool bConfirmAbandon = false;
 };

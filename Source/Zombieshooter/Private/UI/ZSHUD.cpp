@@ -17,6 +17,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Bunker/ZSBunkerGameMode.h"
 #include "Profile/ZSProfileSubsystem.h"
+#include "Missions/ZSMissionSubsystem.h"
 
 namespace
 {
@@ -421,6 +422,8 @@ void AZSHUD::DrawSurvival(const AZSGameState_Survival* GS, const AZSPlayerCharac
 	if (GS->Phase != EZSRoundPhase::GameOver)
 	{
 		DrawRunEconomy(GS, Scale);
+		DrawTask(GS, Scale);
+		DrawMissionTracker(Scale);
 	}
 	DrawPauseMenu(Scale);
 }
@@ -476,6 +479,106 @@ void AZSHUD::DrawBunker(AZSBunkerGameMode* GM, float Scale)
 	{
 		GM->NoticeTime -= GetWorld()->GetDeltaSeconds();
 		DrawCentered(GM->Notice.ToString(), Canvas->ClipY * 0.3f, Font, 1.3f * Scale, HeadGold);
+	}
+}
+
+void AZSHUD::DrawTask(const AZSGameState_Survival* GS, float Scale)
+{
+	UFont* Font = GEngine->GetMediumFont();
+	const float Now = GetWorld()->GetTimeSeconds();
+	const float X = 72.f * Scale;
+	float Y = 215.f * Scale;
+	auto Text = [&](const FString& S, float TextScale, const FLinearColor& C)
+	{
+		DrawText(S, HudShadow, X + 2.f, Y + 2.f, Font, TextScale * Scale);
+		DrawText(S, C, X, Y, Font, TextScale * Scale);
+		Y += 28.f * TextScale * Scale;
+	};
+
+	if (GS->bTaskActive)
+	{
+		const FLinearColor Orange(1.f, 0.6f, 0.15f, 1.f);
+		Text(FString::Printf(TEXT("TASK: %s"), *GS->TaskTitle.ToString()), 1.35f, Orange);
+		Text(GS->TaskStatus.ToString(), 1.05f, HudWhite);
+		// Time bar (and progress, where it applies).
+		const float BarW = 300.f * Scale, BarH = 6.f * Scale;
+		FCanvasTileItem Back(FVector2D(X, Y), FVector2D(BarW, BarH), FLinearColor(0.f, 0.f, 0.f, 0.5f));
+		Back.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(Back);
+		FCanvasTileItem Fill(FVector2D(X, Y), FVector2D(BarW * FMath::Clamp(GS->TaskProgress, 0.f, 1.f), BarH), FLinearColor(0.4f, 0.95f, 0.4f, 0.95f));
+		Fill.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(Fill);
+		Y += 14.f * Scale;
+		const bool bHurry = GS->TaskTimeLeft < 10.f;
+		Text(FString::Printf(TEXT("%d s"), FMath::CeilToInt(GS->TaskTimeLeft)), 1.2f, bHurry ? KillRed : HudWhite);
+		if (Now - GS->TaskStartTime < 3.f)
+		{
+			DrawCentered(FString::Printf(TEXT("NEW TASK: %s"), *GS->TaskTitle.ToString()), Canvas->ClipY * 0.34f, Font, 1.8f * Scale, Orange);
+		}
+
+		// Beacon indicator: on screen above the marker, or clamped to the screen edge.
+		const APlayerController* PC = GetOwningPlayerController();
+		if (GS->bTaskHasMarker && PC && PC->GetPawn())
+		{
+			FVector2D P;
+			const FVector World = GS->TaskMarker + FVector(0.f, 0.f, 150.f);
+			const bool bOnScreen = PC->ProjectWorldLocationToScreen(World, P, false);
+			const FVector ToMarker = World - PC->PlayerCameraManager->GetCameraLocation();
+			const bool bBehind = FVector::DotProduct(ToMarker, PC->PlayerCameraManager->GetCameraRotation().Vector()) < 0.f;
+			const float M = 40.f * Scale;
+			if (!bOnScreen || bBehind)
+			{
+				// Point toward it along the bottom of the screen.
+				const FVector Local = PC->PlayerCameraManager->GetCameraRotation().UnrotateVector(ToMarker);
+				P.X = Local.Y >= 0.f ? Canvas->ClipX - M : M;
+				P.Y = Canvas->ClipY * 0.5f;
+			}
+			P.X = FMath::Clamp(P.X, M, Canvas->ClipX - M);
+			P.Y = FMath::Clamp(P.Y, M, Canvas->ClipY - M);
+			const float Dist = FVector::Dist(PC->GetPawn()->GetActorLocation(), GS->TaskMarker) / 100.f;
+			const FLinearColor C = GS->TaskTitle.ToString().Contains(TEXT("BEACON")) ? FLinearColor(0.3f, 0.85f, 1.f, 1.f) : Orange;
+			const float D = 10.f * Scale;
+			DrawLine(P.X, P.Y - D, P.X + D, P.Y, C, 3.f);
+			DrawLine(P.X + D, P.Y, P.X, P.Y + D, C, 3.f);
+			DrawLine(P.X, P.Y + D, P.X - D, P.Y, C, 3.f);
+			DrawLine(P.X - D, P.Y, P.X, P.Y - D, C, 3.f);
+			const FString DistText = FString::Printf(TEXT("%.0f m"), Dist);
+			float TW, TH;
+			GetTextSize(DistText, TW, TH, Font, Scale);
+			DrawText(DistText, C, P.X - TW * 0.5f, P.Y + D + 4.f, Font, Scale);
+		}
+	}
+	else if (Now - GS->TaskResultTime < 3.f && !GS->TaskResult.IsEmpty())
+	{
+		const bool bOk = GS->TaskResult.ToString().Contains(TEXT("COMPLETE"));
+		DrawCentered(GS->TaskResult.ToString(), Canvas->ClipY * 0.34f, Font, 2.f * Scale, bOk ? HeadGold : KillRed);
+	}
+}
+
+void AZSHUD::DrawMissionTracker(float Scale)
+{
+	const UZSMissionSubsystem* Missions = UZSMissionSubsystem::Get(this);
+	if (!Missions || !Missions->IsRunActive())
+	{
+		return;
+	}
+	UFont* Font = GEngine->GetMediumFont();
+	const float X = 72.f * Scale;
+	float Y = Canvas->ClipY * 0.52f;
+	int32 Shown = 0;
+	for (const FZSMissionStatus& St : Missions->GetActive())
+	{
+		if (St.bComplete || Shown >= 3)
+		{
+			continue;
+		}
+		const bool bDoneThisRun = St.Total() >= St.Mission.Target;
+		const FString Line = FString::Printf(TEXT("%s  %d/%d"), *St.Mission.Title.ToString(), St.Total(), St.Mission.Target);
+		const FLinearColor C = bDoneThisRun ? HeadGold : FLinearColor(0.85f, 0.85f, 0.85f, 0.75f);
+		DrawText(Line, HudShadow, X + 1.f, Y + 1.f, Font, 0.95f * Scale);
+		DrawText(Line, C, X, Y, Font, 0.95f * Scale);
+		Y += 24.f * Scale;
+		++Shown;
 	}
 }
 

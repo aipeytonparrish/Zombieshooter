@@ -21,6 +21,7 @@
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
 #include "Bunker/ZSBunkerMenus.h"
+#include "Rounds/ZSRunTaskComponent.h"
 #include "Zombieshooter.h"
 
 AZSPlayerController::AZSPlayerController()
@@ -243,6 +244,12 @@ void AZSPlayerController::StartAutoShotIfRequested()
 	{
 		FTimerHandle TPTimer;
 		GetWorldTimerManager().SetTimer(TPTimer, FTimerDelegate::CreateWeakLambda(this, [this]() { ZSThirdPerson(); }), 1.0f, false);
+	}
+	int32 AutoTask = 0;
+	if (FParse::Value(Cmd, TEXT("ZSAutoTask="), AutoTask))
+	{
+		FTimerHandle TaskTimer;
+		GetWorldTimerManager().SetTimer(TaskTimer, FTimerDelegate::CreateWeakLambda(this, [this, AutoTask]() { ZSTask(AutoTask); }), 2.0f, false);
 	}
 	// Bunker menus: -ZSAutoMenu=Map|Armory|Market|Character|Missions [-ZSAutoMenuKeys=DDC] (D down, U up, C confirm, B back).
 	int32 AutoCash = 0;
@@ -688,4 +695,12 @@ void AZSPlayerController::ZSProbe()
 		Dirs += FString::Printf(TEXT(" %.0f:%.0f"), i * 22.5f, D);
 	}
 	UE_LOG(LogZS, Warning, TEXT("ZSProbe at %s floor %.0f ceiling %.0f |%s"), *P->GetActorLocation().ToString(), FloorZ, CeilZ, *Dirs);
+}
+
+void AZSPlayerController::ZSTask(int32 Type)
+{
+	if (AZSGameMode_Survival* GM = GetWorld()->GetAuthGameMode<AZSGameMode_Survival>())
+	{
+		GM->GetTasks()->StartTask(static_cast<EZSRunTaskType>(FMath::Clamp(Type, 1, 3)));
+	}
 }

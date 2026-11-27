@@ -29,6 +29,8 @@ private:
 	void DrawResults(const AZSGameState_Survival* GS, float Scale);
 	void DrawPauseMenu(float Scale);
 	void DrawBunker(class AZSBunkerGameMode* GM, float Scale);
+	void DrawTask(const AZSGameState_Survival* GS, float Scale);
+	void DrawMissionTracker(float Scale);
 	void DrawCentered(const FString& Text, float Y, class UFont* Font, float TextScale, const FLinearColor& Color);
 
 	struct FToast

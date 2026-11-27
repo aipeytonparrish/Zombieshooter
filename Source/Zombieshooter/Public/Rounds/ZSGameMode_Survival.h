@@ -6,6 +6,7 @@
 #include "ZSGameMode_Survival.generated.h"
 
 class UZSRoundManagerComponent;
+class UZSRunTaskComponent;
 class AZSWeaponBase;
 class AZSZombieBase;
 
@@ -23,6 +24,7 @@ public:
 	AZSGameMode_Survival();
 
 	UZSRoundManagerComponent* GetRoundManager() const { return RoundManager; }
+	UZSRunTaskComponent* GetTasks() const { return Tasks; }
 
 	// ---- Economy tuning ----
 	UPROPERTY(EditDefaultsOnly, Category = "ZS|Economy") int32 KillXP = 10;
@@ -44,7 +46,11 @@ public:
 
 	// ---- Called by the round manager ----
 	void RewardKill(AZSZombieBase* Zombie, bool bHeadshot);
+	void OnRoundStarted(int32 Round);
 	void OnRoundCleared(int32 Round);
+
+	/** Adds run XP / cash (at risk) with a popup. */
+	void AddReward(int32 XP, int32 Cash, const FText& Label, bool bBig = false);
 
 	// ---- Run end ----
 	virtual bool HandlePlayerDeath(class AZSPlayerCharacter* Player) override;
@@ -62,9 +68,11 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "ZS|Survival")
 	TObjectPtr<UZSRoundManagerComponent> RoundManager;
 
+	UPROPERTY(VisibleAnywhere, Category = "ZS|Survival")
+	TObjectPtr<UZSRunTaskComponent> Tasks;
+
 private:
 	void EnsureDeployed();
-	void AddReward(int32 XP, int32 Cash, const FText& Label, bool bBig = false);
 
 	bool bDeployed = false;
 	bool bRunEnded = false;

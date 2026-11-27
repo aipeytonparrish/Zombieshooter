@@ -1,5 +1,7 @@
 #include "Rounds/ZSGameMode_Survival.h"
 #include "Rounds/ZSRoundManagerComponent.h"
+#include "Rounds/ZSRunTaskComponent.h"
+#include "Missions/ZSMissionSubsystem.h"
 #include "Rounds/ZSGameState_Survival.h"
 #include "Profile/ZSProfileSubsystem.h"
 #include "Player/ZSPlayerCharacter.h"
@@ -19,6 +21,7 @@ AZSGameMode_Survival::AZSGameMode_Survival()
 	PrimaryActorTick.bTickEvenWhenPaused = true;
 	GameStateClass = AZSGameState_Survival::StaticClass();
 	RoundManager = CreateDefaultSubobject<UZSRoundManagerComponent>(TEXT("RoundManager"));
+	Tasks = CreateDefaultSubobject<UZSRunTaskComponent>(TEXT("Tasks"));
 }
 
 void AZSGameMode_Survival::BeginPlay()
@@ -52,6 +55,7 @@ void AZSGameMode_Survival::EnsureDeployed()
 	if (UZSProfileSubsystem* Profile = UZSProfileSubsystem::Get(this))
 	{
 		Deployed = Profile->BeginRun();
+		if (UZSMissionSubsystem* Missions = UZSMissionSubsystem::Get(this)) { Missions->BeginRun(); }
 		if (AZSGameState_Survival* GS = GetGameState<AZSGameState_Survival>())
 		{
 			GS->AtRisk = Profile->GetAtRiskNames();
@@ -89,6 +93,14 @@ void AZSGameMode_Survival::RewardKill(AZSZombieBase* Zombie, bool bHeadshot)
 	LastKillTime = Now;
 
 	const bool bRunner = Zombie && Zombie->ZombieType == EZSZombieType::Runner;
+	if (UZSMissionSubsystem* Missions = UZSMissionSubsystem::Get(this))
+	{
+		Missions->Record(EZSMissionStat::Kills);
+		if (bHeadshot) { Missions->Record(EZSMissionStat::Headshots); }
+		if (bRunner) { Missions->Record(EZSMissionStat::RunnerKills); }
+		if (KillStreak >= 2) { Missions->Record(EZSMissionStat::MultiKills); }
+	}
+	Tasks->OnZombieKilled();
 	int32 XP = KillXP + (bRunner ? RunnerBonus : 0) + (bHeadshot ? HeadshotBonus : 0);
 	const int32 Cash = KillCash + (bRunner ? RunnerBonus : 0) + (bHeadshot ? HeadshotBonus : 0);
 	FText Label;
@@ -104,8 +116,18 @@ void AZSGameMode_Survival::RewardKill(AZSZombieBase* Zombie, bool bHeadshot)
 	AddReward(XP, Cash, Label);
 }
 
+void AZSGameMode_Survival::OnRoundStarted(int32 Round)
+{
+	Tasks->OnRoundStarted(Round);
+}
+
 void AZSGameMode_Survival::OnRoundCleared(int32 Round)
 {
+	if (UZSMissionSubsystem* Missions = UZSMissionSubsystem::Get(this))
+	{
+		Missions->Record(EZSMissionStat::RoundsSurvived);
+		Missions->Record(EZSMissionStat::ReachRound, Round);
+	}
 	AddReward(RoundXPBase + RoundXPPerRound * Round, RoundCashPerRound * Round,
 		FText::Format(NSLOCTEXT("ZS", "RoundBonus", "ROUND {0} SURVIVED"), FText::AsNumber(Round)), true);
 
@@ -153,7 +175,13 @@ void AZSGameMode_Survival::EndRun(EZSRunOutcome Outcome)
 		Stats.RunTime = GS->RunTime;
 		Stats.XPEarned = GS->RunXP;
 		Stats.CashEarned = GS->RunCash;
+		Stats.TasksCompleted = GS->TasksCompleted;
+		Tasks->EndRun();
 		GS->Result = Profile->EndRun(Outcome, Stats);
+		if (UZSMissionSubsystem* Missions = UZSMissionSubsystem::Get(this))
+		{
+			GS->Result.Unlocks.Append(Missions->EndRun(Outcome == EZSRunOutcome::Won));
+		}
 		GS->ProfileCash = Profile->GetCash();
 		GS->bShowResults = true;
 		GS->Phase = EZSRoundPhase::GameOver;

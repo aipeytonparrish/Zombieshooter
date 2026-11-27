@@ -418,3 +418,22 @@ room. **Never save the Demo map itself** — L_Bunker only references it.
 The other archives in that folder: Shelter (split .rar, UE content), Underground_Tunnel (UE), V2Bunker 4.26 (UE),
 cold-war-underground-bunker (UE 5.0) are good candidates for later levels; Bunker_pack is a Unity package and the
 .blend files need a Blender export before Unreal can use them.
+
+## Milestone 10 — Missions and timed tasks
+
+**Mission board** (bunker): 3 **dailies** (new set every day at 00:00 UTC), 2 **weeklies** (every Monday UTC) and the
+**story chain** (7 chapters, one at a time, ending with "win a run"). Rewards (XP + cash) are paid automatically.
+**Progress only counts when you win the run** — die or abandon and that run's mission progress is lost (the results
+screen says so). During a run, up to 3 unfinished missions are tracked on the left with live progress.
+
+**Timed tasks** in a run (every 3rd round, a few seconds in; types rotate):
+| Task | Goal |
+|---|---|
+| Kill Rush | Kill 8 + round zombies in ~40 s |
+| Hold the Zone | Stand inside the orange ring for 20 s (total) within 60 s |
+| Supply Beacon | Reach the blue beacon within 30 s |
+
+A diamond with the distance points to the ring / beacon (at the screen edge when it's behind you). Completing a task
+pays 150 + 25 × round XP and $100 + 10 × round (run earnings, at risk) and counts toward missions.
+
+Console: `ZSTask 1|2|3` starts a task now.

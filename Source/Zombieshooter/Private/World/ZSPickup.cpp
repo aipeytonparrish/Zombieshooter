@@ -1,4 +1,5 @@
 #include "World/ZSPickup.h"
+#include "Missions/ZSMissionSubsystem.h"
 #include "Player/ZSPlayerCharacter.h"
 #include "Combat/ZSHealthComponent.h"
 #include "UI/ZSHUD.h"
@@ -127,6 +128,7 @@ bool AZSPickup::TryApply(AActor* Other)
 		UGameplayStatics::PlaySound2D(this, Sound);
 	}
 	AZSHUD::Toast(Player, Message);
+	if (UZSMissionSubsystem* Missions = UZSMissionSubsystem::Get(this)) { Missions->Record(EZSMissionStat::PickupsCollected); }
 	Destroy();
 	return true;
 }

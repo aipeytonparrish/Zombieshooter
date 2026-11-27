@@ -130,6 +130,10 @@ public:
 	UFUNCTION(Exec)
 	void ZSProbe();
 
+	/** Start a timed task now: 1 kill rush, 2 hold the zone, 3 supply beacon. */
+	UFUNCTION(Exec)
+	void ZSTask(int32 Type);
+
 	/** Over-the-shoulder camera experiment (Milestone 9). */
 	UFUNCTION(Exec)
 	void ZSThirdPerson();

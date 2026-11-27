@@ -169,6 +169,7 @@ void UZSRoundManagerComponent::StartRound(int32 Round)
 	GS->Round = Round;
 	GS->Phase = EZSRoundPhase::Active;
 	GS->RoundStartTime = GetWorld()->GetTimeSeconds();
+	if (AZSGameMode_Survival* RoundGM = GetWorld()->GetAuthGameMode<AZSGameMode_Survival>()) { RoundGM->OnRoundStarted(Round); }
 	GS->ZombiesRemaining = ToSpawn + Alive;
 	PlayStinger(RoundStartSound, 0.45f, 0.6f);
 	UE_LOG(LogZS, Log, TEXT("Round %d: %d zombies, health x%.2f, speed x%.2f, runners %.0f%%, interval %.2fs, max alive %d"),

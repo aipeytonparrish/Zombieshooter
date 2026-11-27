@@ -10,6 +10,7 @@
 #include "Core/ZSCharacterCatalog.h"
 #include "Camera/CameraComponent.h"
 #include "EngineUtils.h"
+#include "Missions/ZSMissionSubsystem.h"
 #include "Zombieshooter.h"
 
 namespace ZSBunkerMenus
@@ -484,6 +485,36 @@ namespace ZSBunkerMenus
 	void OpenMissions(AZSPlayerController* PC)
 	{
 		if (!PC) { return; }
-		PlaceholderPage(PC, NSLOCTEXT("ZS", "St_Missions", "MISSION BOARD"), NSLOCTEXT("ZS", "MissionsSoon", "Missions coming soon."));
+		FWeakPC WeakPC(PC);
+		FZSMenuPage Page;
+		Page.Title = NSLOCTEXT("ZS", "MissionsTitle", "MISSION BOARD");
+		Page.Refresh = [WeakPC](FZSMenuPage& P)
+		{
+			const UZSMissionSubsystem* Missions = WeakPC.IsValid() ? UZSMissionSubsystem::Get(WeakPC.Get()) : nullptr;
+			if (!Missions) { return; }
+			const FTimespan D = UZSMissionSubsystem::TimeToDailyReset();
+			const FTimespan W = UZSMissionSubsystem::TimeToWeeklyReset();
+			P.Subtitle = FText::Format(NSLOCTEXT("ZS", "MissionsSub", "Dailies reset in {0}h {1}m   Weeklies in {2}d {3}h   Story chapter {4}/{5}"),
+				FText::AsNumber(D.GetHours()), FText::AsNumber(D.GetMinutes()), FText::AsNumber(W.GetDays()), FText::AsNumber(W.GetHours()),
+				FText::AsNumber(FMath::Min(Missions->GetStoryChapter() + 1, Missions->GetStoryChapterCount())), FText::AsNumber(Missions->GetStoryChapterCount()));
+			P.Items.Reset();
+			const FText RuleText = NSLOCTEXT("ZS", "MissionRule", "Progress made during a run only counts if you WIN the run (kill the round-20 boss). Die or abandon and that run's progress is lost. Rewards are paid automatically.");
+			for (const FZSMissionStatus& St : Missions->GetActive())
+			{
+				const TCHAR* Kind = St.Mission.Kind == EZSMissionKind::Daily ? TEXT("DAILY") : (St.Mission.Kind == EZSMissionKind::Weekly ? TEXT("WEEKLY") : TEXT("STORY"));
+				const FText Label = FText::Format(NSLOCTEXT("ZS", "MissionLabel", "{0}   {1}"), FText::FromString(Kind), St.Mission.Title);
+				const FText Value = St.bComplete ? NSLOCTEXT("ZS", "MissionDoneTag", "COMPLETE")
+					: FText::Format(NSLOCTEXT("ZS", "MissionProgress", "{0} / {1}"), FText::AsNumber(St.Saved), FText::AsNumber(St.Mission.Target));
+				const FText Detail = FText::Format(NSLOCTEXT("ZS", "MissionDetail", "Reward: {0} XP and ${1}\n\n{2}"),
+					FText::AsNumber(St.Mission.RewardXP), FText::AsNumber(St.Mission.RewardCash), RuleText);
+				P.Items.Emplace(Label, []() {}, Value, Detail);
+			}
+			if (Missions->GetStoryChapter() >= Missions->GetStoryChapterCount())
+			{
+				P.Items.Emplace(NSLOCTEXT("ZS", "StoryDone", "STORY   All chapters complete"), []() {}, NSLOCTEXT("ZS", "MissionDoneTag", "COMPLETE"));
+			}
+			P.Items.Add(BackItem(WeakPC));
+		};
+		PC->PushMenu(Page);
 	}
 }

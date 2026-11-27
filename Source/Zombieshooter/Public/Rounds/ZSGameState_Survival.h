@@ -65,6 +65,19 @@ public:
 	/** Seconds until the results screen continues on its own. */
 	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") float RestartIn = 0.f;
 
+	// ---- Timed task (UZSRunTaskComponent) ----
+	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") int32 TasksCompleted = 0;
+	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") bool bTaskActive = false;
+	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") FText TaskTitle;
+	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") FText TaskStatus;
+	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") float TaskTimeLeft = 0.f;
+	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") float TaskProgress = 0.f;
+	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") bool bTaskHasMarker = false;
+	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") FVector TaskMarker = FVector::ZeroVector;
+	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") float TaskStartTime = -100.f;
+	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") FText TaskResult;
+	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") float TaskResultTime = -100.f;
+
 	void AddPopup(const FText& Text, bool bBig = false)
 	{
 		FZSRewardPopup& P = Popups.AddDefaulted_GetRef();

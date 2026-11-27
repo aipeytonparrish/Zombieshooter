@@ -1,4 +1,5 @@
 #include "World/ZSAmmoCrate.h"
+#include "Missions/ZSMissionSubsystem.h"
 #include "Player/ZSPlayerCharacter.h"
 #include "Weapons/ZSWeaponComponent.h"
 #include "UI/ZSHUD.h"
@@ -134,4 +135,5 @@ void AZSAmmoCrate::Interact(AZSPlayerCharacter* Player)
 		UGameplayStatics::PlaySound2D(this, RefillSound);
 	}
 	AZSHUD::Toast(Player, NSLOCTEXT("ZS", "AmmoRefilled", "AMMO REFILLED"));
+	if (UZSMissionSubsystem* Missions = UZSMissionSubsystem::Get(this)) { Missions->Record(EZSMissionStat::CratesUsed); }
 }

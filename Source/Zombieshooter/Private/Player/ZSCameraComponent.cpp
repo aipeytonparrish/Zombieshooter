@@ -16,8 +16,29 @@ void UZSCameraComponent::AddLandingImpact(float FallSpeed)
 	DipVelocity -= Dip * 12.f;
 }
 
+void UZSCameraComponent::AddShotPunch(float Strength)
+{
+	PunchVel.Pitch += Strength * FMath::FRandRange(18.f, 26.f);
+	PunchVel.Yaw += Strength * FMath::FRandRange(-12.f, 12.f);
+	PunchVel.Roll += Strength * FMath::FRandRange(-30.f, 30.f);
+	PunchFOVVel += Strength * 30.f;
+}
+
 void UZSCameraComponent::UpdateFeel(float DeltaTime, const UZSMovementComponent* Movement)
 {
+	{
+		// Shot punch springs: stiff and well damped, so each shot is a sharp jolt that's gone in ~0.1 s.
+		const float K = 520.f, D = 38.f;
+		auto Spring = [DeltaTime, K, D](double& X, double& V) { V += (-K * X - D * V) * DeltaTime; X += V * DeltaTime; };
+		Spring(Punch.Pitch, PunchVel.Pitch);
+		Spring(Punch.Yaw, PunchVel.Yaw);
+		Spring(Punch.Roll, PunchVel.Roll);
+		float FX = PunchFOV, FV = PunchFOVVel;
+		FV += (-K * FX - D * FV) * DeltaTime;
+		FX += FV * DeltaTime;
+		PunchFOV = FX;
+		PunchFOVVel = FV;
+	}
 	const UZSGameUserSettings* Settings = UZSGameUserSettings::Get();
 	const float EffectScale = FMath::Clamp(Settings->CameraEffectsScale, 0.f, 1.f);
 
@@ -98,6 +119,8 @@ void UZSCameraComponent::GetCameraView(float DeltaTime, FMinimalViewInfo& Desire
 	const FRotator YawOnly(0.f, DesiredView.Rotation.Yaw, 0.f);
 	DesiredView.Location += YawOnly.RotateVector(FVector(0.f, FeelOffset.Y, 0.f)) + FVector(0.f, 0.f, FeelOffset.Z);
 	DesiredView.Rotation.Roll += CurrentRoll;
+	DesiredView.Rotation += Punch;
+	DesiredView.FOV += PunchFOV;
 }
 
 FTransform UZSCameraComponent::GetViewFeelLocalTransform() const

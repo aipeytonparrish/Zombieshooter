@@ -77,6 +77,7 @@ AZSWeapon_TacticalAR::AZSWeapon_TacticalAR()
 	A.ReloadEmpty = Soft<UAnimSequence>(FP + TEXT("Combat/A_TFA_FP_AR_Reload_Empty"));
 	A.Equip = Soft<UAnimSequence>(FP + TEXT("Transitions/A_TFA_FP_AR_Equip_Quick"));
 	A.Holster = Soft<UAnimSequence>(FP + TEXT("Transitions/A_TFA_FP_AR_Holster"));
+	A.Melee = Soft<UAnimSequence>(FP + TEXT("Combat/A_TFA_FP_AR_Melee_Bash_F"));
 
 	A.WeaponIdle = Soft<UAnimSequence>(WEP + TEXT("Common/A_TFA_WEP_AR_Reference"));
 	A.WeaponFire = Soft<UAnimSequence>(WEP + TEXT("FP/A_TFA_FP_WEP_AR_Fire"));

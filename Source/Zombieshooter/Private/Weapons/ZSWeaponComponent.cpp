@@ -15,6 +15,8 @@
 #include "Player/ZSFirstPersonArmsComponent.h"
 #include "Movement/ZSMovementComponent.h"
 #include "Combat/ZSHealthComponent.h"
+#include "Combat/ZSBloodSubsystem.h"
+#include "Sound/SoundBase.h"
 #include "Combat/ZSAimAssistSubsystem.h"
 #include "Core/ZSGameUserSettings.h"
 #include "CommonInputSubsystem.h"
@@ -27,7 +29,7 @@
 #include "HAL/IConsoleManager.h"
 #include "Zombieshooter.h"
 
-static TAutoConsoleVariable<int32> CVarZSShowImpacts(TEXT("zs.ShowImpacts"), UE_BUILD_SHIPPING ? 0 : 1,
+static TAutoConsoleVariable<int32> CVarZSShowImpacts(TEXT("zs.ShowImpacts"), 0,
 	TEXT("Draw bullet impact points (1) and tracers (2)."));
 
 namespace
@@ -258,6 +260,110 @@ void UZSWeaponComponent::RequestReload()
 	BeginReload();
 }
 
+void UZSWeaponComponent::RequestMelee()
+{
+	AZSWeaponBase* W = GetCurrentWeapon();
+	AZSPlayerCharacter* Char = GetCharacter();
+	if (!W || !Char || State == EZSWeaponState::Melee || State == EZSWeaponState::Equipping || State == EZSWeaponState::Unequipping)
+	{
+		return;
+	}
+	if (State == EZSWeaponState::Reloading)
+	{
+		CancelReload();
+	}
+	State = EZSWeaponState::Melee;
+	StateTime = 0.f;
+	StateDuration = MeleeDuration;
+	bMeleeHitDone = false;
+	bMeleeAnimated = false;
+	if (W->IsAnimated())
+	{
+		const FZSLoadedAnimSet& L = W->GetLoadedAnims();
+		if (UZSFPAnimInstance* ArmsAnim = W->GetArmsAnim(); ArmsAnim && L.Melee)
+		{
+			// Play the bash at a speed that fits our melee window.
+			const float Rate = FMath::Clamp(L.Melee->GetPlayLength() / (MeleeDuration * 1.15f), 1.f, 2.2f);
+			ArmsAnim->PlayAction(L.Melee, Rate, 0.04f, 0.12f);
+			bMeleeAnimated = true;
+		}
+	}
+	static USoundBase* Whoosh = LoadObject<USoundBase>(nullptr, TEXT("/Game/InfimaGames/TacticalFPSAnimations/Common/Audio/Melee/A_TFA_Melee_Whoosh_Cue.A_TFA_Melee_Whoosh_Cue"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	if (Whoosh)
+	{
+		UGameplayStatics::PlaySound2D(this, Whoosh, 0.8f);
+	}
+}
+
+void UZSWeaponComponent::DoMeleeHit()
+{
+	AZSPlayerCharacter* Char = GetCharacter();
+	UWorld* World = GetWorld();
+	if (!Char || !World)
+	{
+		return;
+	}
+	const FVector Eye = Char->GetFirstPersonCamera()->GetComponentLocation();
+	const FVector Fwd = GetPC()->GetControlRotation().Vector();
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(ZSMelee), false, Char);
+	for (AZSWeaponBase* Carried : Weapons) { Params.AddIgnoredActor(Carried); }
+
+	// Generous sweep (it's a panic button): best target is the closest thing with health in front.
+	TArray<FHitResult> Hits;
+	World->SweepMultiByChannel(Hits, Eye, Eye + Fwd * MeleeRange, FQuat::Identity, ZS_TRACE_WEAPON, FCollisionShape::MakeSphere(32.f), Params);
+	const FHitResult* Best = nullptr;
+	const FHitResult* Wall = nullptr;
+	for (const FHitResult& H : Hits)
+	{
+		if (UZSHealthComponent* HC = UZSHealthComponent::FindOn(H.GetActor()); HC && !HC->IsDead())
+		{
+			if (!Best || H.Distance < Best->Distance) { Best = &H; }
+		}
+		else if (!Wall && H.bBlockingHit)
+		{
+			Wall = &H;
+		}
+	}
+	UZSCameraComponent* Cam = Char->GetFirstPersonCamera();
+	static USoundBase* Impact = LoadObject<USoundBase>(nullptr, TEXT("/Game/InfimaGames/TacticalFPSAnimations/Common/Audio/Melee/A_TFA_Melee_Impact_Cue.A_TFA_Melee_Impact_Cue"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	if (Best)
+	{
+		AActor* Target = Best->GetActor();
+		UZSHealthComponent* HC = UZSHealthComponent::FindOn(Target);
+		FHitResult Hit = *Best;
+		if (Hit.ImpactPoint.IsZero()) { Hit.ImpactPoint = Hit.Location; }
+		const bool bWasAlive = !HC->IsDead();
+		UGameplayStatics::ApplyPointDamage(Target, MeleeDamage, Fwd, Hit, GetPC(), GetCurrentWeapon(), UDamageType::StaticClass());
+		if (Impact) { UGameplayStatics::PlaySoundAtLocation(this, Impact, Hit.ImpactPoint, 1.f, FMath::FRandRange(0.85f, 1.f)); }
+		if (bWasAlive)
+		{
+			FZSHitInfo Info;
+			Info.Location = Hit.ImpactPoint;
+			Info.Damage = MeleeDamage;
+			Info.bKill = HC->IsDead();
+			Info.Time = World->GetTimeSeconds();
+			RecentHits.Add(Info);
+			LastHitTime = Info.Time;
+			OnWeaponHit.Broadcast(Info);
+			PlayHitConfirm(Info.bKill, false);
+		}
+		// Shove what's left of it back.
+		if (ACharacter* Victim = Cast<ACharacter>(Target); Victim && !HC->IsDead())
+		{
+			Victim->LaunchCharacter(FVector(Fwd.X, Fwd.Y, 0.f).GetSafeNormal() * 380.f + FVector(0.f, 0.f, 80.f), true, false);
+		}
+		if (Cam) { Cam->AddShotPunch(1.4f); }
+		Rumble(0.8f, 0.15f);
+	}
+	else if (Wall)
+	{
+		if (UZSBloodSubsystem* FX = World->GetSubsystem<UZSBloodSubsystem>()) { FX->SpawnImpact(*Wall, Fwd, true); }
+		if (Impact) { UGameplayStatics::PlaySoundAtLocation(this, Impact, Wall->ImpactPoint, 0.6f, 1.2f); }
+		if (Cam) { Cam->AddShotPunch(0.8f); }
+		Rumble(0.5f, 0.1f);
+	}
+}
+
 void UZSWeaponComponent::RequestSwitchWeapon()
 {
 	if (Weapons.Num() < 2 || State == EZSWeaponState::Unequipping)
@@ -414,6 +520,24 @@ void UZSWeaponComponent::UpdateStateMachine(float DeltaTime)
 			EquipIndex(PendingIndex != INDEX_NONE ? PendingIndex : CurrentIndex, false);
 		}
 		break;
+
+	case EZSWeaponState::Melee:
+	{
+		const float T = StateTime / FMath::Max(StateDuration, 0.01f);
+		// Procedural bash curve: snap out fast, hold, ease back.
+		MeleeAlpha = bMeleeAnimated ? 0.f : (T < 0.22f ? EaseInOut(T / 0.22f) : (T < 0.4f ? 1.f : 1.f - EaseInOut(FMath::Min(1.f, (T - 0.4f) / 0.6f))));
+		if (!bMeleeHitDone && StateTime >= MeleeHitTime)
+		{
+			bMeleeHitDone = true;
+			DoMeleeHit();
+		}
+		if (StateTime >= StateDuration)
+		{
+			State = EZSWeaponState::Idle;
+			MeleeAlpha = 0.f;
+		}
+		break;
+	}
 
 	case EZSWeaponState::Reloading:
 		if (!bReloadCommitted && StateTime >= StateDuration * W->Stats.ReloadCommitFraction)
@@ -710,7 +834,36 @@ void UZSWeaponComponent::FireShot()
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, W->FireSound, W->GetMuzzleWorldLocation());
 	}
-	Rumble(S.WeaponClass == EZSWeaponClass::Pistol ? 0.25f : 0.35f, 0.07f);
+	Rumble(S.WeaponClass == EZSWeaponClass::Pistol ? 0.3f : 0.4f, 0.08f);
+	if (UZSCameraComponent* PunchCam = Cast<UZSCameraComponent>(Char->GetFirstPersonCamera()))
+	{
+		const float Heavy = FMath::Clamp(S.Damage * FMath::Max(1, S.PelletCount) / 40.f, 0.6f, 2.f);
+		PunchCam->AddShotPunch(0.32f * Heavy * FMath::Lerp(1.f, 0.55f, ADSAlpha));
+	}
+}
+
+void UZSWeaponComponent::PlayHitConfirm(bool bKill, bool bHead)
+{
+	// Crisp 2D confirm: a tick on every hit, a heavy thud on kills (louder for headshot kills).
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (!bKill && Now - LastConfirmSoundTime < 0.06)
+	{
+		return;
+	}
+	LastConfirmSoundTime = Now;
+	if (!HitConfirmSound)
+	{
+		HitConfirmSound = LoadObject<USoundBase>(nullptr, TEXT("/Game/RealWeaponSoundFX/Bullet_Sound_FX/Combained_Cues/Cue_Bullet_on_soft.Cue_Bullet_on_soft"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+		KillConfirmSound = LoadObject<USoundBase>(nullptr, TEXT("/Game/InfimaGames/TacticalFPSAnimations/Common/Audio/Melee/A_TFA_Melee_Impact_Cue.A_TFA_Melee_Impact_Cue"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	}
+	if (bKill && KillConfirmSound)
+	{
+		UGameplayStatics::PlaySound2D(this, KillConfirmSound, bHead ? 0.7f : 0.5f, bHead ? 0.8f : 1.f);
+	}
+	if (HitConfirmSound)
+	{
+		UGameplayStatics::PlaySound2D(this, HitConfirmSound, bHead ? 0.5f : 0.35f, bHead ? 1.9f : 1.6f);
+	}
 }
 
 void UZSWeaponComponent::TraceBullet(const FVector& Start, const FVector& Direction, float BaseDamage)
@@ -784,7 +937,8 @@ void UZSWeaponComponent::TraceBullet(const FVector& Start, const FVector& Direct
 				RecentHits.Add(Info);
 				LastHitTime = Info.Time;
 				OnWeaponHit.Broadcast(Info);
-				Rumble(Info.bKill ? 0.6f : 0.2f, Info.bKill ? 0.15f : 0.05f);
+				Rumble(Info.bKill ? 0.6f : 0.25f, Info.bKill ? 0.15f : 0.06f);
+				PlayHitConfirm(Info.bKill, bHead);
 			}
 
 			// Bullets pass through bodies (zombie piles), losing damage.
@@ -801,6 +955,10 @@ void UZSWeaponComponent::TraceBullet(const FVector& Start, const FVector& Direct
 		if (DebugMode >= 1)
 		{
 			DrawDebugPoint(World, Hit.ImpactPoint, 6.f, FColor(255, 180, 40), false, 2.5f);
+		}
+		if (UZSBloodSubsystem* FX = World->GetSubsystem<UZSBloodSubsystem>())
+		{
+			FX->SpawnImpact(Hit, Direction, Penetrations == 0);
 		}
 
 		// World geometry: measure thickness by tracing back from the far side.
@@ -1075,6 +1233,8 @@ void UZSWeaponComponent::UpdateViewModel(float DeltaTime, const FRotator& Player
 	// Sprint / mantle poses.
 	Loc += SprintPoseOffset * SprintAlpha;
 	Rot += SprintPoseRotation * SprintAlpha;
+	Loc += FVector(16.f, -9.f, 2.f) * MeleeAlpha;
+	Rot += FRotator(-28.f, 18.f, -35.f) * MeleeAlpha;
 	Loc += FVector(-6.f, 0.f, -18.f) * LowerAlpha;
 	Rot.Pitch -= 35.f * LowerAlpha;
 
@@ -1228,6 +1388,8 @@ void UZSWeaponComponent::UpdateAnimatedViewModel(float DeltaTime, const FRotator
 	Rot += SwayRotation;
 
 	Loc += W->AnimSet.ADSViewOffset * AdsEase;
+	Loc += FVector(16.f, -9.f, 2.f) * MeleeAlpha;
+	Rot += FRotator(-28.f, 18.f, -35.f) * MeleeAlpha;
 	Loc += FVector(-6.f, 0.f, -18.f) * LowerAlpha;
 	Rot.Pitch -= 35.f * LowerAlpha;
 

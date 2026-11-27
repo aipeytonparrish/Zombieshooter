@@ -169,6 +169,8 @@ private:
 	void Input_SwitchWeapon(const FInputActionValue& Value);
 	void Input_FireMode(const FInputActionValue& Value);
 	void Input_Interact(const FInputActionValue& Value);
+	void Input_Melee(const FInputActionValue& Value);
+	float SlideDustTimer = 0.f;
 
 	void StartSprint(bool bToggleMode);
 	void StopSprint(bool bToggleMode);

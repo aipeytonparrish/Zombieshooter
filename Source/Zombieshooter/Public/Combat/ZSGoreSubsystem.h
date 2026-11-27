@@ -49,6 +49,8 @@ private:
 	{
 		TWeakObjectPtr<UStaticMeshComponent> Comp;
 		float Life = 0.f;
+		float DripTimer = 0.f;
+		bool bSplatted = false;
 	};
 	TArray<FGib> Gibs;
 

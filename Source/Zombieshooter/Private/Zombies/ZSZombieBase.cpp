@@ -84,7 +84,7 @@ AZSZombieBase::AZSZombieBase()
 	USkeletalMeshComponent* MeshComp = GetMesh();
 	MeshComp->SetRelativeLocationAndRotation(FVector(0.f, 0.f, -90.f), FRotator(0.f, -90.f, 0.f));
 	MeshComp->SetCollisionProfileName(UCollisionProfile::CustomCollisionProfileName);
-	MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);   // physics too, for the blended hit reactions (responses stay Ignore)
 	MeshComp->SetCollisionObjectType(ECC_PhysicsBody);
 	MeshComp->SetCollisionResponseToAllChannels(ECR_Ignore);
 	MeshComp->SetCollisionResponseToChannel(ZS_TRACE_WEAPON, ECR_Block);
@@ -130,6 +130,7 @@ void AZSZombieBase::BeginPlay()
 	ApplyTypeDefaults();
 
 	Health->OnDeath.AddDynamic(this, &ThisClass::HandleDeath);
+	GetMesh()->SetEnableGravity(false);   // hit-react bodies shouldn't sag; the ragdoll turns it back on
 
 	if (UZSAimAssistSubsystem* Registry = GetWorld()->GetSubsystem<UZSAimAssistSubsystem>())
 	{
@@ -316,6 +317,7 @@ void AZSZombieBase::Tick(float DeltaSeconds)
 
 	StateTime += DeltaSeconds;
 	FlinchTimer = FMath::Max(0.f, FlinchTimer - DeltaSeconds);
+	UpdatePhysicalHit(DeltaSeconds);
 	if (IsBoss())
 	{
 		UpdateBoss(DeltaSeconds);
@@ -614,6 +616,17 @@ float AZSZombieBase::TakeDamage(float DamageAmount, const FDamageEvent& DamageEv
 
 	const float Applied = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
 
+	// Every bullet hits hard: a physical jolt on the body part, a stutter in the stride, a shove on heavy hits.
+	if (State != EZSZombieState::Dead && !IsBoss() && DamageEvent.IsOfType(FPointDamageEvent::ClassID))
+	{
+		StartPhysicalHit(LastHitBone, LastHitDirection, DamageAmount * (bLastHitHead ? 1.4f : 1.f));
+		if ((DamageAmount >= 30.f || bLastHitHead) && !bCrawling && ZombieType != EZSZombieType::Brute && GetCharacterMovement()->IsMovingOnGround())
+		{
+			const FVector Push = FVector(LastHitDirection.X, LastHitDirection.Y, 0.f).GetSafeNormal() * FMath::Clamp(DamageAmount * 2.5f, 60.f, 200.f);
+			LaunchCharacter(Push, false, false);
+		}
+	}
+
 	// Flinch (the health component already handled death if this was lethal).
 	if (State != EZSZombieState::Dead && FlinchTimer <= 0.f && State != EZSZombieState::Attacking && SpecialTime < 0.f && !bCrawling &&
 		ZombieType != EZSZombieType::Brute && !IsBoss() && (bLastHitHead || FMath::FRand() < FlinchChance))
@@ -682,8 +695,83 @@ void AZSZombieBase::HandleDeath(UZSHealthComponent* InHealth, AController* Kille
 	SetLifeSpan(CorpseLifetime);
 }
 
+void AZSZombieBase::StartPhysicalHit(FName Bone, const FVector& Direction, float Damage)
+{
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	if (Bone == NAME_None || !MeshComp || !MeshComp->GetBodyInstance(Bone) || bCrawling)
+	{
+		return;
+	}
+	const FString B = Bone.ToString().ToLower();
+	FName Root = TEXT("spine_01");
+	if (B.StartsWith(TEXT("thigh")) || B.StartsWith(TEXT("calf")) || B.StartsWith(TEXT("foot")))
+	{
+		Root = B.EndsWith(TEXT("_l")) ? FName(TEXT("thigh_l")) : FName(TEXT("thigh_r"));
+	}
+	else if (B.Contains(TEXT("head")) || B.Contains(TEXT("neck")))
+	{
+		Root = TEXT("spine_03");
+	}
+	if (!MeshComp->GetBodyInstance(Root))
+	{
+		Root = Bone;
+	}
+	if (HitReactRoot != NAME_None && HitReactRoot != Root)
+	{
+		StopPhysicalHit();
+	}
+	HitReactRoot = Root;
+	HitReactPeak = FMath::Clamp(0.25f + Damage / 90.f, 0.3f, 0.75f);
+	HitReactAlpha = 1.f;
+	MeshComp->SetAllBodiesBelowSimulatePhysics(Root, true, true);
+	MeshComp->SetAllBodiesBelowPhysicsBlendWeight(Root, HitReactPeak, false, true);
+	const float Kick = FMath::Clamp(Damage * 14.f, 250.f, 1100.f);   // cm/s velocity change on the hit body
+	MeshComp->AddImpulse(Direction.GetSafeNormal() * Kick, Bone, true);
+}
+
+void AZSZombieBase::UpdatePhysicalHit(float DeltaSeconds)
+{
+	if (HitReactRoot == NAME_None)
+	{
+		return;
+	}
+	HitReactAlpha -= DeltaSeconds / 0.32f;
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	if (HitReactAlpha <= 0.f)
+	{
+		StopPhysicalHit();
+		return;
+	}
+	MeshComp->SetAllBodiesBelowPhysicsBlendWeight(HitReactRoot, HitReactPeak * HitReactAlpha * HitReactAlpha, false, true);
+	// Stopping power: the stride stutters while the hit plays out.
+	if (UCharacterMovementComponent* Move = GetCharacterMovement(); Move && !bCrawling)
+	{
+		Move->MaxWalkSpeed = MoveSpeed * BuffMultiplier * (1.f - 0.65f * HitReactAlpha);
+	}
+}
+
+void AZSZombieBase::StopPhysicalHit()
+{
+	if (HitReactRoot != NAME_None)
+	{
+		if (USkeletalMeshComponent* MeshComp = GetMesh(); MeshComp && State != EZSZombieState::Dead)
+		{
+			MeshComp->SetAllBodiesBelowPhysicsBlendWeight(HitReactRoot, 0.f, false, true);
+			MeshComp->SetAllBodiesBelowSimulatePhysics(HitReactRoot, false, true);
+		}
+		if (UCharacterMovementComponent* Move = GetCharacterMovement(); Move && State != EZSZombieState::Dead && !bCrawling)
+		{
+			Move->MaxWalkSpeed = MoveSpeed * BuffMultiplier;
+		}
+	}
+	HitReactRoot = NAME_None;
+	HitReactAlpha = 0.f;
+}
+
 void AZSZombieBase::EnterRagdoll()
 {
+	HitReactRoot = NAME_None;
+	HitReactAlpha = 0.f;
 	if (UZSZombieAnimInstance* Anim = GetZombieAnim())
 	{
 		Anim->Freeze();
@@ -698,8 +786,10 @@ void AZSZombieBase::EnterRagdoll()
 	USkeletalMeshComponent* MeshComp = GetMesh();
 	MeshComp->SetCollisionProfileName(FName(TEXT("Ragdoll")));
 	MeshComp->SetCollisionResponseToChannel(ZS_TRACE_WEAPON, ECR_Block);
+	MeshComp->SetEnableGravity(true);
 	MeshComp->SetAllBodiesSimulatePhysics(true);
 	MeshComp->SetSimulatePhysics(true);
+	MeshComp->SetAllBodiesPhysicsBlendWeight(1.f);
 	MeshComp->WakeAllRigidBodies();
 	MeshComp->bBlendPhysics = true;
 

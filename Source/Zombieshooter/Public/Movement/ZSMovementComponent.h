@@ -146,7 +146,7 @@ public:
 	float JogSpeed = 520.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ZS|Movement|Speeds", meta = (ClampMin = "0", ForceUnits = "cm/s"))
-	float SprintSpeed = 760.f;
+	float SprintSpeed = 780.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ZS|Movement|Speeds", meta = (ClampMin = "0", ForceUnits = "cm/s"))
 	float CrouchSpeed = 300.f;
@@ -161,7 +161,7 @@ public:
 	// ---- Slide ----
 	/** Minimum horizontal speed needed to start a slide from a sprint. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ZS|Movement|Slide", meta = (ForceUnits = "cm/s"))
-	float SlideMinEnterSpeed = 600.f;
+	float SlideMinEnterSpeed = 560.f;
 
 	/** Slide ends (becomes a crouch) below this speed. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ZS|Movement|Slide", meta = (ForceUnits = "cm/s"))
@@ -169,7 +169,7 @@ public:
 
 	/** Speed added along the movement direction when a slide starts. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ZS|Movement|Slide", meta = (ForceUnits = "cm/s"))
-	float SlideEnterBoost = 380.f;
+	float SlideEnterBoost = 460.f;
 
 	/** Absolute cap on slide speed (protects against slope + slide-hop runaway). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ZS|Movement|Slide", meta = (ForceUnits = "cm/s"))
@@ -180,7 +180,7 @@ public:
 	float SlideGravityForce = 4000.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ZS|Movement|Slide")
-	float SlideFriction = 0.9f;
+	float SlideFriction = 0.7f;
 
 	/** Sideways steering acceleration while sliding. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ZS|Movement|Slide")
@@ -192,7 +192,7 @@ public:
 
 	/** Jumping out of a slide keeps momentum and adds this horizontal boost (slide-hop). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ZS|Movement|Slide", meta = (ForceUnits = "cm/s"))
-	float SlideHopBoost = 120.f;
+	float SlideHopBoost = 160.f;
 
 	// ---- Jump / double jump ----
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ZS|Movement|Jump", meta = (ForceUnits = "cm/s"))

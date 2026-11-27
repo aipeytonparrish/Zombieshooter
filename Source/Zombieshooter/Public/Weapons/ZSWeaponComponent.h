@@ -34,6 +34,14 @@ public:
 	void SetTriggerHeld(bool bHeld);
 	void SetADSHeld(bool bHeld);
 	void RequestReload();
+
+	/** Melee bash (right stick click / V): a short sweep in front, heavy damage and a shove. */
+	void RequestMelee();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ZS|Melee") float MeleeDamage = 150.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ZS|Melee") float MeleeRange = 175.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ZS|Melee") float MeleeDuration = 0.55f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ZS|Melee") float MeleeHitTime = 0.13f;
 	void RequestSwitchWeapon();
 	void RequestCycleFireMode();
 
@@ -160,6 +168,14 @@ private:
 	bool FindAimAssistTarget(FVector& OutPoint, float& OutAngle, float& OutCone) const;
 	bool IsUsingGamepad() const;
 	void Rumble(float Intensity, float Duration) const;
+	void PlayHitConfirm(bool bKill, bool bHead);
+	void DoMeleeHit();
+	bool bMeleeHitDone = false;
+	float MeleeAlpha = 0.f;
+	bool bMeleeAnimated = false;
+	double LastConfirmSoundTime = -1.0;
+	UPROPERTY(Transient) TObjectPtr<class USoundBase> HitConfirmSound;
+	UPROPERTY(Transient) TObjectPtr<class USoundBase> KillConfirmSound;
 
 	AZSPlayerCharacter* GetCharacter() const;
 	APlayerController* GetPC() const;

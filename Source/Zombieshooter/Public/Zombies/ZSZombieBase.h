@@ -271,5 +271,14 @@ private:
 	float LastHitDamage = 0.f;
 	bool bLastHitHead = false;
 
+	// Physical hit reaction: the bodies below HitReactRoot blend toward physics for a moment and get shoved, so every
+	// bullet visibly knocks the body part it hit (head snaps back, shoulders twist, legs buckle).
+	void StartPhysicalHit(FName Bone, const FVector& Direction, float Damage);
+	void UpdatePhysicalHit(float DeltaSeconds);
+	void StopPhysicalHit();
+	FName HitReactRoot = NAME_None;
+	float HitReactAlpha = 0.f;
+	float HitReactPeak = 0.f;
+
 	static int32 LiveCount;
 };

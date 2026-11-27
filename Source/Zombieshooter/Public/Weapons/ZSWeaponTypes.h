@@ -38,7 +38,8 @@ enum class EZSWeaponState : uint8
 	Idle,
 	Equipping,
 	Unequipping,
-	Reloading
+	Reloading,
+	Melee
 };
 
 /**
@@ -167,6 +168,8 @@ struct FZSWeaponAnimSet
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arms") TSoftObjectPtr<UAnimSequence> ReloadEmpty;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arms") TSoftObjectPtr<UAnimSequence> Equip;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arms") TSoftObjectPtr<UAnimSequence> Holster;
+	/** Optional melee bash; without one the melee is a procedural lunge of the view model. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Arms") TSoftObjectPtr<UAnimSequence> Melee;
 
 	/** Weapon-mesh clips played in sync with the arms (bolt, magazine, slide). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Weapon") TSoftObjectPtr<UAnimSequence> WeaponIdle;

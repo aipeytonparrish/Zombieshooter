@@ -327,6 +327,7 @@ bool AZSWeaponBase::TryBuildAnimated()
 	Loaded.ReloadEmpty = LoadKept(A.ReloadEmpty, KeepAlive);
 	Loaded.Equip = LoadKept(A.Equip, KeepAlive);
 	Loaded.Holster = LoadKept(A.Holster, KeepAlive);
+	Loaded.Melee = LoadKept(A.Melee, KeepAlive);
 	Loaded.WeaponFire = LoadKept(A.WeaponFire, KeepAlive);
 	Loaded.WeaponReload = LoadKept(A.WeaponReload, KeepAlive);
 	Loaded.WeaponReloadEmpty = LoadKept(A.WeaponReloadEmpty, KeepAlive);

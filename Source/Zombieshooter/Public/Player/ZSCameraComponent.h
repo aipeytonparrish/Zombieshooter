@@ -30,6 +30,9 @@ public:
 	/** Kick the landing dip. FallSpeed is the (positive) downward speed at impact. */
 	void AddLandingImpact(float FallSpeed);
 
+	/** Camera-only kick from a shot (the gun stays put, so it reads as the gun bucking): ~0.3 pistol .. 1.2 heavy. */
+	void AddShotPunch(float Strength);
+
 	virtual void GetCameraView(float DeltaTime, FMinimalViewInfo& DesiredView) override;
 
 	/** The bob / roll offset GetCameraView applies to the view, expressed in this component's local space.
@@ -58,7 +61,7 @@ public:
 	float BobSprintAmplitudeScale = 1.6f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "ZS|Camera|Tilt", meta = (ForceUnits = "deg"))
-	float SlideTilt = 5.f;
+	float SlideTilt = 6.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "ZS|Camera|Tilt", meta = (ForceUnits = "deg"))
 	float WallRunTilt = 12.f;
@@ -86,7 +89,7 @@ public:
 	float SprintFOVKick = 5.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "ZS|Camera|FOV", meta = (ForceUnits = "deg"))
-	float SlideFOVKick = 8.f;
+	float SlideFOVKick = 11.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "ZS|Camera|FOV", meta = (ForceUnits = "deg"))
 	float WallRunFOVKick = 6.f;
@@ -110,4 +113,8 @@ private:
 
 	float ADSFOVMultiplier = 1.f;
 	float ADSAlpha = 0.f;
+	FRotator Punch = FRotator::ZeroRotator;
+	FRotator PunchVel = FRotator::ZeroRotator;
+	float PunchFOV = 0.f;
+	float PunchFOVVel = 0.f;
 };

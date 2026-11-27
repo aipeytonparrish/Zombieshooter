@@ -22,6 +22,7 @@ struct FZSLoadedAnimSet
 	UAnimSequence* ReloadEmpty = nullptr;
 	UAnimSequence* Equip = nullptr;
 	UAnimSequence* Holster = nullptr;
+	UAnimSequence* Melee = nullptr;
 	UAnimSequence* WeaponFire = nullptr;
 	UAnimSequence* WeaponReload = nullptr;
 	UAnimSequence* WeaponReloadEmpty = nullptr;

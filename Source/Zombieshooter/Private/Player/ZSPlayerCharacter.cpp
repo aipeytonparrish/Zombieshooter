@@ -9,6 +9,7 @@
 #include "Player/ZSFirstPersonArmsComponent.h"
 #include "Weapons/ZSWeaponComponent.h"
 #include "Combat/ZSHealthComponent.h"
+#include "Combat/ZSBloodSubsystem.h"
 #include "Interaction/ZSInteractionComponent.h"
 #include "Core/ZSGameMode_Sandbox.h"
 #include "Engine/SkeletalMesh.h"
@@ -235,6 +236,21 @@ void AZSPlayerCharacter::Tick(float DeltaSeconds)
 	UpdateEyeHeight(DeltaSeconds);
 	FirstPersonCamera->UpdateFeel(DeltaSeconds, Move);
 
+	// Dust off the floor while sliding.
+	if (Move && Move->IsSliding())
+	{
+		SlideDustTimer -= DeltaSeconds;
+		if (SlideDustTimer <= 0.f)
+		{
+			SlideDustTimer = 0.06f;
+			if (UZSBloodSubsystem* FX = GetWorld()->GetSubsystem<UZSBloodSubsystem>())
+			{
+				const FVector Feet = GetActorLocation() - FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight() - 5.f);
+				FX->SpawnDust(Feet + GetVelocity().GetSafeNormal2D() * 60.f, GetVelocity() * 0.25f, FMath::Clamp(GetVelocity().Size2D() / 900.f, 0.5f, 1.2f));
+			}
+		}
+	}
+
 	if (const AZSPlayerController* PC = Cast<AZSPlayerController>(GetController()))
 	{
 		if (PC->IsMovementDebugVisible())
@@ -345,6 +361,7 @@ void AZSPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	EIC->BindAction(Set->SwitchWeapon, ETriggerEvent::Started, this, &ThisClass::Input_SwitchWeapon);
 	EIC->BindAction(Set->FireMode, ETriggerEvent::Started, this, &ThisClass::Input_FireMode);
 	EIC->BindAction(Set->Interact, ETriggerEvent::Started, this, &ThisClass::Input_Interact);
+	EIC->BindAction(Set->Melee, ETriggerEvent::Started, this, &ThisClass::Input_Melee);
 }
 
 FVector2D AZSPlayerCharacter::ApplyRadialDeadZone(const FVector2D& Raw, float Inner, float Outer)
@@ -572,6 +589,7 @@ void AZSPlayerCharacter::Input_Interact(const FInputActionValue& Value)
 }
 void AZSPlayerCharacter::Input_SwitchWeapon(const FInputActionValue& Value) { if (WeaponComponent) { WeaponComponent->RequestSwitchWeapon(); } }
 void AZSPlayerCharacter::Input_FireMode(const FInputActionValue& Value) { if (WeaponComponent) { WeaponComponent->RequestCycleFireMode(); } }
+void AZSPlayerCharacter::Input_Melee(const FInputActionValue& Value) { if (WeaponComponent) { WeaponComponent->RequestMelee(); } }
 
 // =============================================================================================
 // Debug

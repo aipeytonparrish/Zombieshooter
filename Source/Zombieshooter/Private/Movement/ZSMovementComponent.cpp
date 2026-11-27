@@ -581,7 +581,7 @@ void UZSMovementComponent::PhysSlide(float DeltaTime, int32 Iterations)
 
 	if (GetHorizontalSpeed() < SlideMinSpeed)
 	{
-		ExitSlide(false);
+		ExitSlide(bWantsToSprint && IsMovingForward(SprintMaxAngle));
 		StartNewPhysics(DeltaTime, Iterations);
 		return;
 	}

@@ -18,6 +18,8 @@
 #include "Bunker/ZSBunkerGameMode.h"
 #include "Profile/ZSProfileSubsystem.h"
 #include "Missions/ZSMissionSubsystem.h"
+#include "Core/ZSCharacterCatalog.h"
+#include "Engine/Texture2D.h"
 
 namespace
 {
@@ -25,6 +27,16 @@ namespace
 	const FLinearColor HudShadow(0.f, 0.f, 0.f, 0.6f);
 	const FLinearColor KillRed(1.f, 0.15f, 0.1f, 1.f);
 	const FLinearColor HeadGold(1.f, 0.8f, 0.2f, 1.f);
+
+	// Left 4 Dead health colours.
+	FLinearColor HealthColor(float Frac)
+	{
+		if (Frac > 0.4f) { return FLinearColor(0.36f, 0.85f, 0.3f, 1.f); }
+		if (Frac > 0.24f) { return FLinearColor(0.96f, 0.8f, 0.2f, 1.f); }
+		return FLinearColor(0.95f, 0.18f, 0.12f, 1.f);
+	}
+	const FLinearColor PlateTint(0.025f, 0.025f, 0.025f, 0.78f);
+	const FLinearColor LabelColor(0.86f, 0.82f, 0.72f, 0.95f);
 
 	FText FireModeText(EZSFireMode Mode)
 	{
@@ -85,6 +97,43 @@ void AZSHUD::DrawHUD()
 	DrawHitMarkers(Weapons, Scale);
 	DrawDamageNumbers(Weapons, Scale);
 	DrawAmmo(Weapons, Scale);
+}
+
+void AZSHUD::EnsureHudTextures()
+{
+	if (bTriedHudTextures)
+	{
+		return;
+	}
+	bTriedHudTextures = true;
+	PlateTex = LoadObject<UTexture2D>(nullptr, TEXT("/Game/ZS/Textures/FX/T_ZS_HudPlate.T_ZS_HudPlate"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	SmearTex = LoadObject<UTexture2D>(nullptr, TEXT("/Game/ZS/Textures/FX/T_ZS_HudSmear.T_ZS_HudSmear"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+}
+
+void AZSHUD::DrawPlate(float X, float Y, float W, float H, const FLinearColor& Tint)
+{
+	EnsureHudTextures();
+	if (PlateTex)
+	{
+		// A random-looking but stable window into the grunge texture, so plates don't all look identical.
+		const float U = FMath::Frac(X * 0.0013f), V = FMath::Frac(Y * 0.0017f);
+		DrawTexture(PlateTex, X, Y, W, H, U * 0.3f, V * 0.3f, 0.7f, 0.7f * FMath::Min(1.f, H / FMath::Max(W, 1.f)) + 0.3f, Tint, BLEND_Translucent);
+	}
+	else
+	{
+		DrawRect(Tint, X, Y, W, H);
+	}
+	// A thin worn rule along the top edge.
+	DrawRect(FLinearColor(0.6f, 0.55f, 0.45f, 0.18f * Tint.A), X + 6.f, Y + 3.f, W - 12.f, 1.f);
+}
+
+void AZSHUD::DrawSmear(float X, float Y, float W, float H, float Alpha)
+{
+	EnsureHudTextures();
+	if (SmearTex)
+	{
+		DrawTexture(SmearTex, X, Y, W, H, 0.f, 0.f, 1.f, 1.f, FLinearColor(0.55f, 0.5f, 0.5f, Alpha), BLEND_Translucent);
+	}
 }
 
 void AZSHUD::DrawCrosshair(UZSWeaponComponent* Weapons, float Scale)
@@ -192,29 +241,55 @@ void AZSHUD::DrawAmmo(UZSWeaponComponent* Weapons, float Scale)
 	UFont* Big = GEngine->GetLargeFont();
 	UFont* Small = GEngine->GetMediumFont();
 
-	const float Right = Canvas->ClipX - 70.f * Scale;
-	const float Bottom = Canvas->ClipY - 70.f * Scale;
+	// Weapon card, bottom right: a grungy plate with the name, a big magazine count, reserve, and a row of rounds.
+	const float CardW = 400.f * Scale, CardH = 118.f * Scale;
+	const float CardX = Canvas->ClipX - 40.f * Scale - CardW, CardY = Canvas->ClipY - 36.f * Scale - CardH;
+	DrawPlate(CardX, CardY, CardW, CardH, PlateTint);
+	const float Right = CardX + CardW - 22.f * Scale;
+	const float Bottom = CardY + CardH - 16.f * Scale;
 
 	const int32 Mag = W->GetAmmoInMag();
-	const FLinearColor MagColor = Mag == 0 ? KillRed : (Mag <= W->Stats.MagSize / 4 ? HeadGold : HudWhite);
+	const int32 MagSize = FMath::Max(1, W->Stats.MagSize);
+	const FLinearColor MagColor = Mag == 0 ? KillRed : (Mag <= MagSize / 4 ? HeadGold : FLinearColor(0.95f, 0.93f, 0.88f, 1.f));
 	const FString MagText = FString::Printf(TEXT("%d"), Mag);
-	const FString ReserveText = FString::Printf(TEXT("/ %d"), W->GetReserveAmmo());
+	const FString ReserveText = FString::Printf(TEXT("%d"), W->GetReserveAmmo());
 
 	float MagW, MagH, ResW, ResH;
-	GetTextSize(MagText, MagW, MagH, Big, 2.6f * Scale);
-	GetTextSize(ReserveText, ResW, ResH, Small, 1.6f * Scale);
-
+	GetTextSize(MagText, MagW, MagH, Big, 3.6f * Scale);
+	GetTextSize(ReserveText, ResW, ResH, Small, 1.8f * Scale);
 	const float ResX = Right - ResW;
-	const float MagX = ResX - MagW - 10.f * Scale;
-	DrawText(MagText, HudShadow, MagX + 2.f, Bottom - MagH + 2.f, Big, 2.6f * Scale);
-	DrawText(MagText, MagColor, MagX, Bottom - MagH, Big, 2.6f * Scale);
-	DrawText(ReserveText, HudWhite, ResX, Bottom - ResH - 6.f * Scale, Small, 1.6f * Scale);
+	const float MagX = ResX - MagW - 18.f * Scale;
+	const float MagY = Bottom - MagH + 10.f * Scale;
+	DrawText(MagText, HudShadow, MagX + 3.f, MagY + 3.f, Big, 3.6f * Scale);
+	DrawText(MagText, MagColor, MagX, MagY, Big, 3.6f * Scale);
+	DrawRect(FLinearColor(0.7f, 0.65f, 0.55f, 0.5f), ResX - 10.f * Scale, Bottom - MagH * 0.75f, 2.f * Scale, MagH * 0.6f);   // divider
+	DrawText(ReserveText, HudShadow, ResX + 2.f, Bottom - ResH - 4.f * Scale + 2.f, Small, 1.8f * Scale);
+	DrawText(ReserveText, LabelColor, ResX, Bottom - ResH - 4.f * Scale, Small, 1.8f * Scale);
 
-	const FString Info = FString::Printf(TEXT("%s   %s"), *W->Stats.DisplayName.ToString().ToUpper(), *FireModeText(W->GetFireMode()).ToString());
-	float InfoW, InfoH;
-	GetTextSize(Info, InfoW, InfoH, Small, 1.2f * Scale);
-	DrawText(Info, HudShadow, Right - InfoW + 2.f, Bottom - MagH - InfoH - 4.f * Scale + 2.f, Small, 1.2f * Scale);
-	DrawText(Info, FLinearColor(0.8f, 0.8f, 0.8f, 0.9f), Right - InfoW, Bottom - MagH - InfoH - 4.f * Scale, Small, 1.2f * Scale);
+	const FString Name = W->Stats.DisplayName.ToString().ToUpper();
+	DrawText(Name, HudShadow, CardX + 22.f * Scale + 2.f, CardY + 14.f * Scale + 2.f, Small, 1.25f * Scale);
+	DrawText(Name, LabelColor, CardX + 22.f * Scale, CardY + 14.f * Scale, Small, 1.25f * Scale);
+	const FString Mode = FireModeText(W->GetFireMode()).ToString();
+	float ModeW, ModeH;
+	GetTextSize(Mode, ModeW, ModeH, Small, 0.95f * Scale);
+	DrawRect(FLinearColor(0.75f, 0.1f, 0.06f, 0.85f), Right - ModeW - 12.f * Scale, CardY + 14.f * Scale, ModeW + 12.f * Scale, ModeH + 2.f * Scale);
+	DrawText(Mode, FLinearColor(1.f, 0.92f, 0.85f, 1.f), Right - ModeW - 6.f * Scale, CardY + 15.f * Scale, Small, 0.95f * Scale);
+
+	// Rounds: one pip per round (grouped for big mags), spent ones dark.
+	{
+		const int32 Pips = FMath::Min(MagSize, 40);
+		const float PerPip = float(MagSize) / Pips;
+		const float PipArea = MagX - (CardX + 22.f * Scale) - 16.f * Scale;
+		const float PipW = FMath::Clamp(PipArea / Pips - 2.f * Scale, 2.f * Scale, 7.f * Scale);
+		const float PipH = 22.f * Scale;
+		const float PipY = Bottom - PipH - 4.f * Scale;
+		for (int32 i = 0; i < Pips; ++i)
+		{
+			const bool bFull = (i + 0.5f) * PerPip <= Mag;
+			const float PX = CardX + 22.f * Scale + i * (PipW + 2.f * Scale);
+			DrawRect(bFull ? FLinearColor(0.85f, 0.7f, 0.35f, 0.95f) : FLinearColor(0.2f, 0.18f, 0.15f, 0.7f), PX, PipY, PipW, PipH);
+		}
+	}
 
 	// Reload bar under the crosshair.
 	const float Progress = Weapons->GetReloadProgress();
@@ -268,24 +343,73 @@ void AZSHUD::DrawHealth(const AZSPlayerCharacter* Char, float Scale)
 		}
 	}
 
-	// Health bar, bottom-left.
-	const float W = 320.f * Scale, H = 12.f * Scale;
-	const float X = 70.f * Scale, Y = Canvas->ClipY - 70.f * Scale - H;
-	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.55f), X - 2.f, Y - 2.f, W + 4.f, H + 4.f);
-	const FLinearColor BarColor = Frac < 0.35f ? FLinearColor(0.9f, 0.15f, 0.1f, 0.95f) : FLinearColor(0.92f, 0.92f, 0.92f, 0.9f);
-	DrawRect(BarColor, X, Y, W * Frac, H);
+	// Survivor card, bottom left (Left 4 Dead style): name, big health number and bar in green / yellow / red,
+	// a white trail showing damage just taken, armour plates underneath.
+	const float CardW = 440.f * Scale, CardH = 118.f * Scale;
+	const float CardX = 40.f * Scale, CardY = Canvas->ClipY - 36.f * Scale - CardH;
+	DrawPlate(CardX, CardY, CardW, CardH, PlateTint);
 	UFont* Small = GEngine->GetMediumFont();
-	DrawText(FString::Printf(TEXT("%d"), FMath::CeilToInt(Health->GetHealth())), HudWhite, X, Y - 26.f * Scale, Small, 1.3f * Scale);
+	UFont* BigFont = GEngine->GetLargeFont();
+	const FLinearColor HC = HealthColor(Frac);
+
+	FString Name = TEXT("SURVIVOR");
+	if (const UZSProfileSubsystem* Profile = GetGameInstance() ? GetGameInstance()->GetSubsystem<UZSProfileSubsystem>() : nullptr)
+	{
+		const TArray<ZSCharacterCatalog::FBody>& Bodies = ZSCharacterCatalog::Bodies();
+		if (Bodies.IsValidIndex(Profile->GetLook().Body))
+		{
+			Name = Bodies[Profile->GetLook().Body].DisplayName.ToString().ToUpper();
+		}
+		Name += FString::Printf(TEXT("   LV %d"), Profile->GetLevel());
+	}
+	DrawText(Name, HudShadow, CardX + 22.f * Scale + 2.f, CardY + 14.f * Scale + 2.f, Small, 1.15f * Scale);
+	DrawText(Name, LabelColor, CardX + 22.f * Scale, CardY + 14.f * Scale, Small, 1.15f * Scale);
+
+	const FString HPText = FString::Printf(TEXT("%d"), FMath::CeilToInt(Health->GetHealth()));
+	float HPW, HPH;
+	GetTextSize(HPText, HPW, HPH, BigFont, 3.4f * Scale);
+	const float HPX = CardX + 22.f * Scale, HPY = CardY + CardH - HPH - 4.f * Scale;
+	const float Pulse = Frac <= 0.24f ? 0.65f + 0.35f * FMath::Sin(Now * 7.f) : 1.f;
+	DrawText(HPText, HudShadow, HPX + 3.f, HPY + 3.f, BigFont, 3.4f * Scale);
+	DrawText(HPText, HC * FLinearColor(1.f, 1.f, 1.f, Pulse), HPX, HPY, BigFont, 3.4f * Scale);
+
+	// Damage trail: holds for a moment after a hit, then drains down to the real value.
+	const float Real = Health->GetHealth();
+	if (HealthTrail < 0.f) { HealthTrail = Real; LastHealthSeen = Real; }
+	if (Real < LastHealthSeen) { HealthTrailHold = 0.5f; }
+	LastHealthSeen = Real;
+	const float Dt = FMath::Clamp(GetWorld()->GetDeltaSeconds(), 0.f, 0.1f);
+	if (HealthTrailHold > 0.f) { HealthTrailHold -= Dt; }
+	else { HealthTrail = FMath::FInterpConstantTo(HealthTrail, Real, Dt, Health->MaxHealth * 0.6f); }
+	HealthTrail = FMath::Max(HealthTrail, Real);
+	const float TrailFrac = FMath::Clamp(HealthTrail / FMath::Max(Health->MaxHealth, 1.f), 0.f, 1.f);
+
+	const float W = CardW - (HPX - CardX) - 130.f * Scale - 22.f * Scale, H = 16.f * Scale;
+	const float X = HPX + 130.f * Scale, Y = CardY + CardH - 50.f * Scale;
+	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.7f), X - 2.f, Y - 2.f, W + 4.f, H + 4.f);
+	DrawRect(FLinearColor(0.08f, 0.07f, 0.06f, 0.9f), X, Y, W, H);
+	DrawRect(FLinearColor(0.9f, 0.88f, 0.85f, 0.8f), X, Y, W * TrailFrac, H);
+	DrawRect(HC * FLinearColor(0.8f, 0.8f, 0.8f, 1.f), X, Y, W * Frac, H);
+	DrawRect(FLinearColor(1.f, 1.f, 1.f, 0.18f), X, Y, W * Frac, H * 0.35f);   // sheen
+	for (int32 i = 1; i < 10; ++i)   // segment ticks
+	{
+		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.45f), X + W * i / 10.f, Y, 1.f, H);
+	}
+	if (Frac <= 0.24f)
+	{
+		const FString Warn = TEXT("BLEEDING OUT");
+		DrawText(Warn, FLinearColor(0.95f, 0.2f, 0.12f, Pulse), X, Y - 26.f * Scale, Small, 1.05f * Scale);
+	}
 
 	// Armor plates: one segment per 50 points, above the health bar.
 	if (Health->MaxArmor > 0.f)
 	{
 		const int32 Plates = FMath::Max(1, FMath::RoundToInt(Health->MaxArmor / 50.f));
 		const float Gap = 6.f * Scale;
-		const float SegW = (W * 0.6f - Gap * (Plates - 1)) / Plates;
+		const float SegW = (W - Gap * (Plates - 1)) / Plates;
 		const float SegH = 7.f * Scale;
-		const float SegY = Y - 40.f * Scale;
-		const float SegX0 = X + 60.f * Scale;
+		const float SegY = Y + H + 8.f * Scale;
+		const float SegX0 = X;
 		for (int32 i = 0; i < Plates; ++i)
 		{
 			const float Fill = FMath::Clamp((Health->GetArmor() - i * 50.f) / 50.f, 0.f, 1.f);
@@ -384,14 +508,33 @@ void AZSHUD::DrawSurvival(const AZSGameState_Survival* GS, const AZSPlayerCharac
 	// Top-left: round number, zombies left, kills.
 	if (GS->Round > 0)
 	{
+		// The round number painted over a dried blood smear; it throbs when a new round starts.
+		const float RoundAge = Now - GS->RoundStartTime;
+		const float Throb = GS->Phase == EZSRoundPhase::Active && RoundAge < 2.f ? 1.f + 0.15f * FMath::Sin(RoundAge * 12.f) * (1.f - RoundAge / 2.f) : 1.f;
+		DrawSmear(10.f * Scale, 0.f, 360.f * Scale, 210.f * Scale, 0.85f);
 		const FString RoundText = FString::Printf(TEXT("%d"), GS->Round);
-		DrawText(RoundText, HudShadow, 73.f * Scale, 33.f * Scale, Big, 6.5f * Scale);
-		DrawText(RoundText, RoundRed, 70.f * Scale, 30.f * Scale, Big, 6.5f * Scale);
+		DrawText(TEXT("ROUND"), HudShadow, 46.f * Scale, 36.f * Scale, Small, 1.1f * Scale);
+		DrawText(TEXT("ROUND"), LabelColor, 44.f * Scale, 34.f * Scale, Small, 1.1f * Scale);
+		const float RS = 7.5f * Scale * Throb;
+		DrawText(RoundText, FLinearColor(0.f, 0.f, 0.f, 0.75f), 48.f * Scale, 52.f * Scale, Big, RS);
+		DrawText(RoundText, FLinearColor(0.95f, 0.9f, 0.82f, 0.97f), 44.f * Scale, 48.f * Scale, Big, RS);
+
+		const float InfoY = 215.f * Scale;
+		DrawPlate(30.f * Scale, InfoY - 6.f * Scale, 260.f * Scale, (GS->Phase == EZSRoundPhase::Active ? 64.f : 38.f) * Scale, PlateTint * FLinearColor(1, 1, 1, 0.8f));
 		if (GS->Phase == EZSRoundPhase::Active)
 		{
-			DrawText(FString::Printf(TEXT("ZOMBIES  %d"), GS->ZombiesRemaining), HudWhite, 72.f * Scale, 140.f * Scale, Small, 1.3f * Scale);
+			DrawText(TEXT("INFECTED"), LabelColor, 46.f * Scale, InfoY, Small, 1.05f * Scale);
+			const FString Left = FString::Printf(TEXT("%d"), GS->ZombiesRemaining);
+			float LW, LH;
+			GetTextSize(Left, LW, LH, Small, 1.35f * Scale);
+			DrawText(Left, FLinearColor(0.95f, 0.3f, 0.2f, 1.f), 270.f * Scale - LW, InfoY - 3.f * Scale, Small, 1.35f * Scale);
 		}
-		DrawText(FString::Printf(TEXT("KILLS  %d"), GS->Kills), FLinearColor(0.8f, 0.8f, 0.8f, 0.8f), 72.f * Scale, 168.f * Scale, Small, 1.15f * Scale);
+		const float KY = InfoY + (GS->Phase == EZSRoundPhase::Active ? 28.f : 0.f) * Scale;
+		DrawText(TEXT("KILLS"), LabelColor * FLinearColor(1, 1, 1, 0.8f), 46.f * Scale, KY, Small, 1.05f * Scale);
+		const FString KillsText = FString::Printf(TEXT("%d"), GS->Kills);
+		float KW, KH;
+		GetTextSize(KillsText, KW, KH, Small, 1.15f * Scale);
+		DrawText(KillsText, HudWhite, 270.f * Scale - KW, KY - 1.f * Scale, Small, 1.15f * Scale);
 	}
 
 	const float CY = Canvas->ClipY * 0.26f;
@@ -446,6 +589,7 @@ void AZSHUD::DrawBunker(AZSBunkerGameMode* GM, float Scale)
 	UFont* Font = GEngine->GetMediumFont();
 	const float X = 70.f * Scale;
 	float Y = 50.f * Scale;
+	DrawPlate(40.f * Scale, 30.f * Scale, 380.f * Scale, 220.f * Scale, PlateTint);
 	auto Line = [&](const FString& Text, float TextScale, const FLinearColor& Color)
 	{
 		DrawText(Text, HudShadow, X + 2.f, Y + 2.f, Font, TextScale * Scale);
@@ -737,6 +881,7 @@ void AZSHUD::DrawRunEconomy(const AZSGameState_Survival* GS, float Scale)
 		DrawText(Text, HudShadow, Right - TW + 2.f, Y + 2.f, Small, TextScale);
 		DrawText(Text, Color, Right - TW, Y, Small, TextScale);
 	};
+	DrawPlate(Right - 230.f * Scale, 36.f * Scale, 250.f * Scale, 112.f * Scale, PlateTint);
 	RightText(FString::Printf(TEXT("$%d"), GS->RunCash), 50.f * Scale, 2.f * Scale, FLinearColor(0.55f, 0.95f, 0.45f, 0.95f));
 	RightText(FString::Printf(TEXT("%d XP"), GS->RunXP), 92.f * Scale, 1.4f * Scale, HudWhite);
 	RightText(TEXT("AT RISK"), 122.f * Scale, 1.f * Scale, FLinearColor(0.9f, 0.4f, 0.3f, 0.8f));

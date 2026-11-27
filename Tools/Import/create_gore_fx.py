@@ -3,7 +3,8 @@
   python Tools/Import/gen_fx_textures.py Saved/GeneratedFX          (plain Python, makes the PNGs)
   UnrealEditor-Cmd.exe Zombieshooter.uproject -run=pythonscript -script="Tools/Import/create_gore_fx.py"
 
-Creates in /Game/ZS/Textures/FX: T_ZS_BloodSplat (2x2 atlas), T_ZS_BloodPool, T_ZS_BulletHole (2x2 atlas), T_ZS_Puff, T_ZS_Drop
+Creates in /Game/ZS/Textures/FX: T_ZS_BloodSplat (2x2 atlas), T_ZS_BloodPool, T_ZS_BulletHole (2x2 atlas), T_ZS_Puff, T_ZS_Drop,
+and the HUD's T_ZS_HudPlate (grungy panel) / T_ZS_HudSmear (blood brush stroke)
 and in /Game/ZS/Materials:
   M_ZS_DecalAtlas   deferred decal. Params: Tex, Atlas (0.5 = 2x2 atlas, 1 = single), Frame (0-3), Tint, Opacity,
                     RoughThin / RoughThick (wet blood is glossy where thick), Metal.
@@ -12,6 +13,8 @@ and in /Game/ZS/Materials:
                     0 = opacity, 1-3 = colour. Param Tex.  MI_ZS_FXPuff (mist / dust), MI_ZS_FXDrop (droplets)
   M_ZS_FXSpark      unlit additive streak (custom data 0 = opacity, 1-3 = colour) for metal sparks / muzzle embers
   M_ZS_Flesh        wet, mottled flesh for gibs
+  M_ZS_Paint        plain lit paint for placeholders. Params: Color, Roughness, Metallic, Emissive (scalar, x Color).
+                    (The engine's BasicShapeMaterial ignores a "Color" parameter in game, which left placeholders white.)
 """
 import os
 import sys
@@ -71,13 +74,18 @@ def fresh_instance(name, parent, scalars=None, vectors=None, textures=None):
 
 def import_textures():
     out = {}
-    for name in ("T_ZS_BloodSplat", "T_ZS_BloodPool", "T_ZS_BulletHole", "T_ZS_Puff", "T_ZS_Drop"):
+    for name in ("T_ZS_BloodSplat", "T_ZS_BloodPool", "T_ZS_BulletHole", "T_ZS_Puff", "T_ZS_Drop", "T_ZS_HudPlate", "T_ZS_HudSmear"):
         png = os.path.join(SRC, name + ".png")
         if not os.path.exists(png):
             raise RuntimeError("missing %s - run gen_fx_textures.py first" % png)
         tex = zs.import_texture(png, TEX, "color")
         tex.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_DEFAULT)
-        tex.set_editor_property("lod_group", unreal.TextureGroup.TEXTUREGROUP_EFFECTS)
+        if name.startswith("T_ZS_Hud"):
+            tex.set_editor_property("lod_group", unreal.TextureGroup.TEXTUREGROUP_UI)
+            tex.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_EDITOR_ICON)
+            tex.set_editor_property("mip_gen_settings", unreal.TextureMipGenSettings.TMGS_NO_MIPMAPS)
+        else:
+            tex.set_editor_property("lod_group", unreal.TextureGroup.TEXTUREGROUP_EFFECTS)
         zs.eal.save_loaded_asset(tex)
         out[name] = tex
     return out
@@ -211,6 +219,24 @@ def build_flesh():
     return mat
 
 
+def build_paint():
+    mat = fresh_material("M_ZS_Paint")
+    color = vector(mat, "Color", unreal.LinearColor(0.5, 0.5, 0.5, 1), -500, -100)
+    mel.connect_material_property(color, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    rough = scalar(mat, "Roughness", 0.65, -500, 100)
+    mel.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    metal = scalar(mat, "Metallic", 0.0, -500, 200)
+    mel.connect_material_property(metal, "", unreal.MaterialProperty.MP_METALLIC)
+    emis = scalar(mat, "Emissive", 0.0, -500, 300)
+    em = expr(mat, unreal.MaterialExpressionMultiply, -250, 300)
+    link(color, em, "A")
+    link(emis, em, "B")
+    mel.connect_material_property(em, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    mel.recompile_material(mat)
+    zs.eal.save_loaded_asset(mat)
+    return mat
+
+
 tex = import_textures()
 decal = build_decal_master(tex["T_ZS_BloodSplat"])
 fresh_instance("MI_ZS_BloodSplat", decal, {"Atlas": 0.5, "RoughThin": 0.3, "RoughThick": 0.06},
@@ -224,4 +250,5 @@ fresh_instance("MI_ZS_FXPuff", sprite, textures={"Tex": tex["T_ZS_Puff"]})
 fresh_instance("MI_ZS_FXDrop", sprite, textures={"Tex": tex["T_ZS_Drop"]})
 build_spark()
 build_flesh()
+build_paint()
 zs.log("gore fx: textures + materials created")

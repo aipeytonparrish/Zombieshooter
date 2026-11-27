@@ -256,6 +256,76 @@ def drop(s):
     return px
 
 
+def hud_plate(rng, w, h):
+    """Grungy dark plate: torn, uneven edges, scratches and worn patches. White RGB (tinted in the HUD), A = coverage."""
+    nz = ValueNoise(rng, max(w, h), cells=(6, 16, 40, 90), weights=(0.45, 0.3, 0.15, 0.1)).field()
+    s = max(w, h)
+    px = bytearray(w * h * 4)
+    scratches = []
+    for _ in range(26):
+        x0, y0 = rng.uniform(0, w), rng.uniform(0, h)
+        a = rng.gauss(0.0, 0.25)
+        scratches.append((x0, y0, math.cos(a), math.sin(a), rng.uniform(20, w * 0.5), rng.uniform(0.15, 0.4)))
+    for y in range(h):
+        for x in range(w):
+            n = nz[y * s + x]
+            # distance to the nearest edge, roughened -> torn border
+            e = min(x, w - 1 - x, (y) * 2.0, (h - 1 - y) * 2.0)
+            edge = smoothstep(2.0, 14.0, e + (n - 0.5) * 26.0)
+            a = edge * (0.78 + 0.22 * n)
+            # worn patches
+            a *= 1.0 - 0.35 * smoothstep(0.62, 0.8, n)
+            lum = 0.75 + 0.25 * n
+            for sx, sy, cx_, cy_, ln, st in scratches:
+                dx, dy = x - sx, y - sy
+                along = dx * cx_ + dy * cy_
+                if 0 < along < ln and abs(dx * cy_ - dy * cx_) < 0.7:
+                    lum = min(1.0, lum + st)
+            i = (y * w + x) * 4
+            v = int(255 * lum)
+            px[i] = px[i + 1] = px[i + 2] = v
+            px[i + 3] = int(max(0.0, min(1.0, a)) * 255)
+    return px
+
+
+def hud_smear(rng, w, h):
+    """A dry blood brush smear (behind the round number): thick start, ragged bristle streaks trailing out."""
+    f = [0.0] * (w * h)
+    bristles = [rng.uniform(0.22, 0.78) for _ in range(70)]
+    for b in bristles:
+        y = b * h
+        length = w * rng.uniform(0.45, 0.97)
+        r = h * rng.uniform(0.012, 0.035)
+        x = w * rng.uniform(0.03, 0.12)
+        steps = int(length / 1.5)
+        wob = rng.uniform(0.0, 6.28)
+        for k in range(steps):
+            t = k / float(steps)
+            rr = r * (1.0 - 0.75 * t) * (0.85 + 0.15 * math.sin(t * 17.0 + wob))
+            yy = y + math.sin(t * 3.0 + b * 9.0) * h * 0.03
+            x0, x1 = int(max(0, x - rr)), int(min(w - 1, x + rr))
+            y0, y1 = int(max(0, yy - rr)), int(min(h - 1, yy + rr))
+            for py in range(y0, y1 + 1):
+                for pxx in range(x0, x1 + 1):
+                    q = ((pxx - x) ** 2 + (py - yy) ** 2) / (rr * rr + 1e-3)
+                    if q < 1.0:
+                        f[py * w + pxx] = max(f[py * w + pxx], (1.0 - q) * (1.0 - 0.6 * t))
+            x += length / steps
+    nz = ValueNoise(rng, w, cells=(8, 24, 60), weights=(0.5, 0.3, 0.2)).field()
+    px = bytearray(w * h * 4)
+    for y in range(h):
+        for x in range(w):
+            v = f[y * w + x]
+            n = nz[y * w + x]
+            a = smoothstep(0.08, 0.3, v + (n - 0.5) * 0.25)
+            i = (y * w + x) * 4
+            px[i] = int(110 + 60 * n)
+            px[i + 1] = int(6 + 6 * n)
+            px[i + 2] = int(5 + 5 * n)
+            px[i + 3] = int(a * 230)
+    return px
+
+
 def main(out):
     os.makedirs(out, exist_ok=True)
     rng = random.Random(1337)
@@ -283,6 +353,8 @@ def main(out):
 
     write_png(os.path.join(out, "T_ZS_Puff.png"), 128, 128, puff(rng, 128))
     write_png(os.path.join(out, "T_ZS_Drop.png"), 64, 64, drop(64))
+    write_png(os.path.join(out, "T_ZS_HudPlate.png"), 512, 512, hud_plate(rng, 512, 512))
+    write_png(os.path.join(out, "T_ZS_HudSmear.png"), 512, 512, hud_smear(rng, 512, 512))
     print("done")
 
 

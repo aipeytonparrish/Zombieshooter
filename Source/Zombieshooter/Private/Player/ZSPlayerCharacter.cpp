@@ -236,6 +236,19 @@ void AZSPlayerCharacter::Tick(float DeltaSeconds)
 	UpdateEyeHeight(DeltaSeconds);
 	FirstPersonCamera->UpdateFeel(DeltaSeconds, Move);
 
+	// Left 4 Dead style: the world drains of colour as you get close to death.
+	if (const UZSHealthComponent* HC = GetHealthComponent())
+	{
+		const float Frac = HC->GetHealth() / FMath::Max(HC->MaxHealth, 1.f);
+		const float Target = HC->IsDead() ? 0.f : (Frac < 0.3f ? FMath::Lerp(0.15f, 1.f, Frac / 0.3f) : 1.f);
+		LowHealthSaturation = FMath::FInterpTo(LowHealthSaturation, Target, DeltaSeconds, 3.f);
+		FPostProcessSettings& PP = FirstPersonCamera->PostProcessSettings;
+		PP.bOverride_ColorSaturation = LowHealthSaturation < 0.995f;
+		PP.ColorSaturation = FVector4(LowHealthSaturation, LowHealthSaturation, LowHealthSaturation, 1.f);
+		PP.bOverride_VignetteIntensity = LowHealthSaturation < 0.995f;
+		PP.VignetteIntensity = FMath::Lerp(0.9f, 0.4f, LowHealthSaturation);
+	}
+
 	// Dust off the floor while sliding.
 	if (Move && Move->IsSliding())
 	{

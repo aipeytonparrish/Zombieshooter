@@ -20,7 +20,7 @@ namespace ZSWeaponPaths
 {
 	static const TCHAR* Cube = TEXT("/Engine/BasicShapes/Cube.Cube");
 	static const TCHAR* Cylinder = TEXT("/Engine/BasicShapes/Cylinder.Cylinder");
-	static const TCHAR* ShapeMaterial = TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial");
+	static const TCHAR* ShapeMaterial = TEXT("/Game/ZS/Materials/M_ZS_Paint.M_ZS_Paint");
 }
 
 AZSWeaponBase::AZSWeaponBase()

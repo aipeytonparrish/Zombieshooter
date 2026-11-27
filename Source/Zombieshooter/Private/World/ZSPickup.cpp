@@ -83,7 +83,7 @@ void AZSPickup::BeginPlay()
 	Mesh->SetStaticMesh(Shape);
 	// Health: a small box; armor: a flat plate.
 	Mesh->SetRelativeScale3D(bHealth ? FVector(0.22f) : FVector(0.32f, 0.32f, 0.06f));
-	if (UMaterialInterface* Mat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")))
+	if (UMaterialInterface* Mat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ZS/Materials/M_ZS_Paint.M_ZS_Paint")))
 	{
 		UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Mat, this);
 		MID->SetVectorParameterValue(TEXT("Color"), Color);

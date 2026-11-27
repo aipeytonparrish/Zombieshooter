@@ -29,7 +29,7 @@ void AZSBunkerLayout::BeginPlay()
 UStaticMeshComponent* AZSBunkerLayout::AddBox(const FVector& Center, const FVector& Size, const FLinearColor& Color, bool bCollide)
 {
 	static UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
-	static UMaterialInterface* Shape = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+	static UMaterialInterface* Shape = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ZS/Materials/M_ZS_Paint.M_ZS_Paint"));
 	UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(this, NAME_None, RF_Transient);
 	C->SetupAttachment(RootComponent);
 	C->SetStaticMesh(Cube);

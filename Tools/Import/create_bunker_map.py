@@ -20,6 +20,8 @@ if zs.eal.does_asset_exist(MAP):
 umap = os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_content_dir()), "ZS", "Maps", "L_Bunker.umap")
 if os.path.exists(umap):
     os.remove(umap)
+# Let the asset registry notice the file is gone, or new_level refuses ("an asset already exists").
+unreal.AssetRegistryHelpers.get_asset_registry().scan_paths_synchronous(["/Game/ZS/Maps"], True)
 if not les.new_level(MAP):
     raise RuntimeError("new_level failed")
 
@@ -62,6 +64,29 @@ else:
     s.set_editor_property("override_auto_exposure_max_brightness", True)
     s.set_editor_property("auto_exposure_max_brightness", 5.5)
     ppv.set_editor_property("settings", s)
+
+# Mood: the pack's demo lighting reads washed out (blown whites, flat greys). One unbound volume over everything:
+# a stop darker, steadier exposure, more contrast, a little desaturated and cooler, vignette and grain.
+mood = eas.spawn_actor_from_class(unreal.PostProcessVolume, unreal.Vector(0, 0, floor + 200), unreal.Rotator(0, 0, 0))
+mood.set_actor_label("ZS_BunkerMood")
+mood.set_editor_property("unbound", True)
+mood.set_editor_property("priority", 10.0)
+m = mood.get_editor_property("settings")
+for prop, value in (
+        ("auto_exposure_bias", -1.0),
+        ("auto_exposure_speed_up", 1.5),
+        ("auto_exposure_speed_down", 1.0),
+        ("color_contrast", unreal.Vector4(1.18, 1.18, 1.18, 1.0)),
+        ("color_saturation", unreal.Vector4(0.8, 0.82, 0.85, 1.0)),
+        ("color_gain", unreal.Vector4(0.92, 0.98, 1.04, 1.0)),
+        ("color_gamma", unreal.Vector4(0.96, 0.96, 0.96, 1.0)),
+        ("vignette_intensity", 0.55),
+        ("film_grain_intensity", 0.22),
+        ("bloom_intensity", 0.35),
+        ("tone_curve_amount", 1.0)):
+    m.set_editor_property("override_" + prop, True)
+    m.set_editor_property(prop, value)
+mood.set_editor_property("settings", m)
 
 persistent = None
 for kind, x, y, yaw in stations:

@@ -62,4 +62,15 @@ private:
 	void DrawDamageNumbers(UZSWeaponComponent* Weapons, float Scale);
 	void DrawAmmo(UZSWeaponComponent* Weapons, float Scale);
 	void DrawHealth(const class AZSPlayerCharacter* Char, float Scale);
+
+	// Left 4 Dead style plates.
+	void DrawPlate(float X, float Y, float W, float H, const FLinearColor& Tint);
+	void DrawSmear(float X, float Y, float W, float H, float Alpha);
+	void EnsureHudTextures();
+	UPROPERTY(Transient) TObjectPtr<class UTexture2D> PlateTex;
+	UPROPERTY(Transient) TObjectPtr<class UTexture2D> SmearTex;
+	bool bTriedHudTextures = false;
+	float HealthTrail = -1.f;     // the white "damage taken" trail behind the health bar
+	float LastHealthSeen = -1.f;
+	float HealthTrailHold = 0.f;
 };

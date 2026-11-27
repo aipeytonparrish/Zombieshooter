@@ -17,6 +17,32 @@
 namespace
 {
 	UStaticMesh* Mesh(const TCHAR* Path) { return LoadObject<UStaticMesh>(nullptr, Path, nullptr, LOAD_NoWarn | LOAD_Quiet); }
+	UMaterialInterface* Mat(const TCHAR* Path) { return LoadObject<UMaterialInterface>(nullptr, Path, nullptr, LOAD_NoWarn | LOAD_Quiet); }
+
+	/** A worn-metal material from the owner's industrial kit if it's there, else our paint in a flat colour. */
+	UMaterialInterface* KitOrPaint(UObject* Outer, const TCHAR* KitPath, const FLinearColor& Fallback, float Emissive = 0.f)
+	{
+		if (Emissive <= 0.f)
+		{
+			if (UMaterialInterface* Kit = Mat(KitPath))
+			{
+				return Kit;
+			}
+		}
+		UMaterialInterface* Paint = Mat(TEXT("/Game/ZS/Materials/M_ZS_Paint.M_ZS_Paint"));
+		if (!Paint)
+		{
+			return nullptr;
+		}
+		UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Paint, Outer);
+		MID->SetVectorParameterValue(TEXT("Color"), Fallback);
+		MID->SetScalarParameterValue(TEXT("Emissive"), Emissive);
+		return MID;
+	}
+	const TCHAR* Rust = TEXT("/Game/IndustrialKit/SM_Ceiling_Beams_2x2/Materials/M_Rust_Heavy.M_Rust_Heavy");
+	const TCHAR* Steel = TEXT("/Game/IndustrialKit/SM_Floor_TreadPlate_2x2/Materials/M_Steel_Worn.M_Steel_Worn");
+	const TCHAR* Tread = TEXT("/Game/IndustrialKit/SM_Floor_TreadPlate_2x2/Materials/M_Tread_Plate.M_Tread_Plate");
+	const TCHAR* Corrugated = TEXT("/Game/IndustrialKit/SM_Wall_Corrugated_2x3/Materials/M_Corrugated_Metal.M_Corrugated_Metal");
 }
 
 AZSStation::AZSStation()
@@ -148,12 +174,8 @@ void AZSStation::ApplyVisuals()
 	Table->SetStaticMesh(Mesh(TEXT("/Engine/BasicShapes/Cube.Cube")));
 	Table->SetRelativeLocation(FVector(0.f, 0.f, -5.f));
 	Table->SetRelativeScale3D(Type == EZSStationType::MapTable ? FVector(2.4f, 1.6f, 0.9f) : FVector(1.8f, 1.f, 0.9f));
-	if (UMaterialInterface* Shape = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")))
-	{
-		UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Shape, this);
-		MID->SetVectorParameterValue(TEXT("Color"), Type == EZSStationType::MapTable ? FLinearColor(0.12f, 0.16f, 0.1f) : FLinearColor(0.08f, 0.07f, 0.06f));
-		Table->SetMaterial(0, MID);
-	}
+	// Worn steel workbench (it used to render plain white: the engine shape material ignored our colour).
+	Table->SetMaterial(0, KitOrPaint(this, Type == EZSStationType::MapTable ? Tread : Steel, FLinearColor(0.08f, 0.07f, 0.06f)));
 	Collision->SetBoxExtent(Type == EZSStationType::MapTable ? FVector(120.f, 80.f, 50.f) : FVector(90.f, 50.f, 50.f));
 
 	PropA->SetStaticMesh(nullptr);
@@ -178,16 +200,19 @@ void AZSStation::ApplyVisuals()
 		PropA->SetStaticMesh(Mesh(TEXT("/Engine/BasicShapes/Cube.Cube")));
 		PropA->SetRelativeLocationAndRotation(FVector(30.f, 0.f, 100.f), FRotator::ZeroRotator);
 		PropA->SetRelativeScale3D(FVector(0.1f, 0.9f, 2.f));
+		PropA->SetMaterial(0, KitOrPaint(this, Corrugated, FLinearColor(0.1f, 0.12f, 0.1f)));
 		break;
 	case EZSStationType::Missions:
 		PropA->SetStaticMesh(Mesh(TEXT("/Engine/BasicShapes/Plane.Plane")));
 		PropA->SetRelativeLocationAndRotation(FVector(40.f, 0.f, 110.f), FRotator(90.f, 0.f, 0.f));
 		PropA->SetRelativeScale3D(FVector(1.f, 1.6f, 1.f));
+		PropA->SetMaterial(0, KitOrPaint(this, TEXT(""), FLinearColor(0.2f, 0.13f, 0.07f)));   // cork board
 		break;
 	case EZSStationType::MapTable:
 		PropA->SetStaticMesh(Mesh(TEXT("/Engine/BasicShapes/Plane.Plane")));
 		PropA->SetRelativeLocation(FVector(0.f, 0.f, 41.f));
 		PropA->SetRelativeScale3D(FVector(2.f, 1.3f, 1.f));
+		PropA->SetMaterial(0, KitOrPaint(this, TEXT(""), FLinearColor(0.05f, 0.2f, 0.08f), 0.6f));   // glowing tactical map screen
 		break;
 	}
 }

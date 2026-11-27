@@ -171,6 +171,7 @@ private:
 	void Input_Interact(const FInputActionValue& Value);
 	void Input_Melee(const FInputActionValue& Value);
 	float SlideDustTimer = 0.f;
+	float LowHealthSaturation = 1.f;
 
 	void StartSprint(bool bToggleMode);
 	void StopSprint(bool bToggleMode);

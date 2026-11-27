@@ -106,7 +106,7 @@ void AZSAmmoCrate::ApplyVisuals()
 		UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
 		Base->SetStaticMesh(Cube);
 		Base->SetRelativeScale3D(FVector(0.9f, 0.6f, 0.5f));
-		if (UMaterialInterface* Mat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")))
+		if (UMaterialInterface* Mat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ZS/Materials/M_ZS_Paint.M_ZS_Paint")))
 		{
 			UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Mat, this);
 			MID->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.12f, 0.15f, 0.05f));

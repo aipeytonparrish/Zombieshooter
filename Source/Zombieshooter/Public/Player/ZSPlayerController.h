@@ -126,6 +126,10 @@ public:
 	UFUNCTION(Exec)
 	void ZSWinRun();
 
+	/** Over-the-shoulder camera experiment (Milestone 9). */
+	UFUNCTION(Exec)
+	void ZSThirdPerson();
+
 	/** ZSGod -> toggles player invulnerability (testing). */
 	UFUNCTION(Exec)
 	void ZSGod();

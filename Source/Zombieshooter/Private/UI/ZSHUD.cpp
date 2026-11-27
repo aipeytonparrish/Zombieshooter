@@ -652,7 +652,7 @@ void AZSHUD::DrawPauseMenu(float Scale)
 		}
 		Y += RowH;
 	}
-	if (Page->Items.IsValidIndex(Page->Index) && !Page->Items[Page->Index].Detail.IsEmpty())
+	if (!Page->bHideDetail && Page->Items.IsValidIndex(Page->Index) && !Page->Items[Page->Index].Detail.IsEmpty())
 	{
 		const float DX = Canvas->ClipX * 0.6f;
 		const float DY = Canvas->ClipY * 0.3f;

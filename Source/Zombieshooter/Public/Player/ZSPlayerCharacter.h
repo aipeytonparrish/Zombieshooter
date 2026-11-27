@@ -10,6 +10,9 @@ class UZSFirstPersonArmsComponent;
 class UZSWeaponComponent;
 class UZSHealthComponent;
 class UZSInteractionComponent;
+class USpringArmComponent;
+class UCameraComponent;
+class UAnimSequence;
 struct FInputActionValue;
 
 /**
@@ -53,6 +56,13 @@ public:
 	/** Ends sprinting (toggle or held). Used when firing or aiming. */
 	void CancelSprint();
 
+	/** Applies the profile's character look: survivor body (shadow / third person), arms set and tint. */
+	void ApplyLook();
+
+	/** Over-the-shoulder camera experiment (console: ZSThirdPerson). */
+	void SetThirdPerson(bool bEnable);
+	bool IsThirdPerson() const { return bThirdPerson; }
+
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 	virtual void Landed(const FHitResult& Hit) override;
@@ -61,6 +71,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual bool CanJumpInternal_Implementation() const override;
 	virtual bool CanJumpWhileFalling() const override;
 
@@ -86,6 +97,13 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "ZS|Player")
 	TObjectPtr<UZSInteractionComponent> Interaction;
+
+	/** Third-person experiment camera (inactive by default). */
+	UPROPERTY(VisibleAnywhere, Category = "ZS|Player")
+	TObjectPtr<USpringArmComponent> ShoulderBoom;
+
+	UPROPERTY(VisibleAnywhere, Category = "ZS|Player")
+	TObjectPtr<UCameraComponent> ShoulderCamera;
 
 	/** Sandbox only: seconds before respawning after death (the round system replaces this with game over). */
 	UPROPERTY(EditDefaultsOnly, Category = "ZS|Player")
@@ -119,6 +137,14 @@ protected:
 	float EyeHeightInterpSpeed = 14.f;
 
 private:
+	void UpdateBodyAnim();
+
+	bool bThirdPerson = false;
+	bool bBodyRunning = false;
+	FDelegateHandle LookChangedHandle;
+	UPROPERTY(Transient) TObjectPtr<UAnimSequence> BodyIdle;
+	UPROPERTY(Transient) TObjectPtr<UAnimSequence> BodyRun;
+
 	// ---- Input handlers ----
 	void Input_Move(const FInputActionValue& Value);
 	void Input_MoveCompleted(const FInputActionValue& Value);

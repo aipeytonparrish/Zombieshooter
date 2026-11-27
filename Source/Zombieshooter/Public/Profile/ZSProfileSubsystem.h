@@ -98,6 +98,8 @@ public:
 	// ---- Character ----
 	const FZSCharacterLook& GetLook() const;
 	void SetLook(const FZSCharacterLook& Look);
+	/** Broadcast after SetLook (player arms, locker preview). */
+	FSimpleMulticastDelegate OnLookChanged;
 
 	// ---- Runs ----
 	/** Deploy: validates the active preset, saves the active-run flag. Returns the deployed weapons (primary first). */

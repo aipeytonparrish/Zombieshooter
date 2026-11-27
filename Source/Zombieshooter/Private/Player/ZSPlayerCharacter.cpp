@@ -18,6 +18,12 @@
 #include "InputActionValue.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "Core/ZSCharacterCatalog.h"
+#include "Profile/ZSProfileSubsystem.h"
+#include "GameFramework/SpringArmComponent.h"
+#include "Camera/CameraComponent.h"
+#include "Animation/AnimSequence.h"
+#include "Weapons/ZSWeaponBase.h"
 #include "Zombieshooter.h"
 
 AZSPlayerCharacter::AZSPlayerCharacter(const FObjectInitializer& ObjectInitializer)
@@ -73,6 +79,21 @@ AZSPlayerCharacter::AZSPlayerCharacter(const FObjectInitializer& ObjectInitializ
 	// Full body (outfit) is for shadows / mirrors / third person; the owner never sees it directly.
 	GetMesh()->SetOwnerNoSee(true);
 	GetMesh()->bCastHiddenShadow = true;
+	GetMesh()->SetRelativeLocationAndRotation(FVector(0.f, 0.f, -90.f), FRotator(0.f, -90.f, 0.f));
+	GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+
+	ShoulderBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("ShoulderBoom"));
+	ShoulderBoom->SetupAttachment(GetCapsuleComponent());
+	ShoulderBoom->SetRelativeLocation(FVector(0.f, 0.f, 60.f));
+	ShoulderBoom->TargetArmLength = 220.f;
+	ShoulderBoom->SocketOffset = FVector(0.f, 55.f, 10.f);
+	ShoulderBoom->bUsePawnControlRotation = true;
+	ShoulderBoom->bEnableCameraLag = true;
+	ShoulderBoom->CameraLagSpeed = 18.f;
+	ShoulderCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ShoulderCamera"));
+	ShoulderCamera->SetupAttachment(ShoulderBoom);
+	ShoulderCamera->SetAutoActivate(false);
 }
 
 UZSMovementComponent* AZSPlayerCharacter::GetZSMovement() const
@@ -82,6 +103,15 @@ UZSMovementComponent* AZSPlayerCharacter::GetZSMovement() const
 
 void AZSPlayerCharacter::BeginPlay()
 {
+	// The arms set must be chosen before the arms component's own BeginPlay picks its default.
+	if (const UZSProfileSubsystem* Profile = UZSProfileSubsystem::Get(this))
+	{
+		const int32 ArmsIndex = ZSCharacterCatalog::ResolveArms(Profile->GetLook());
+		if (USkeletalMesh* Arms = ZSCharacterCatalog::LoadArms(ArmsIndex))
+		{
+			FirstPersonArms->ArmsMesh = Arms;
+		}
+	}
 	Super::BeginPlay();
 	CurrentEyeHeight = BaseEyeHeight;
 	// Same gloved arms mesh as the code-posed arms; used with animated weapons.
@@ -91,6 +121,93 @@ void AZSPlayerCharacter::BeginPlay()
 	}
 	HealthComponent->OnDamaged.AddDynamic(this, &ThisClass::HandleDamaged);
 	HealthComponent->OnDeath.AddDynamic(this, &ThisClass::HandleDeath);
+
+	ApplyLook();
+	if (UZSProfileSubsystem* Profile = UZSProfileSubsystem::Get(this))
+	{
+		LookChangedHandle = Profile->OnLookChanged.AddUObject(this, &ThisClass::ApplyLook);
+	}
+}
+
+void AZSPlayerCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UZSProfileSubsystem* Profile = UZSProfileSubsystem::Get(this))
+	{
+		Profile->OnLookChanged.Remove(LookChangedHandle);
+	}
+	Super::EndPlay(EndPlayReason);
+}
+
+void AZSPlayerCharacter::ApplyLook()
+{
+	const UZSProfileSubsystem* Profile = UZSProfileSubsystem::Get(this);
+	if (!Profile)
+	{
+		return;
+	}
+	const FZSCharacterLook& Look = Profile->GetLook();
+
+	// Body: shadow in first person, visible in third person.
+	if (USkeletalMesh* Body = ZSCharacterCatalog::LoadBody(Look.Body))
+	{
+		GetMesh()->SetSkeletalMeshAsset(Body);
+		GetMesh()->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+		BodyIdle = ZSCharacterCatalog::LoadIdle(Look.Body);
+		BodyRun = ZSCharacterCatalog::LoadRun(Look.Body);
+		bBodyRunning = false;
+		if (BodyIdle) { GetMesh()->PlayAnimation(BodyIdle, true); }
+	}
+
+	// Arms set + tint (both the code-posed and the animated-rig arms).
+	const int32 ArmsIndex = ZSCharacterCatalog::ResolveArms(Look);
+	const int32 Tint = ZSCharacterCatalog::ResolveTint(Look);
+	if (USkeletalMesh* Arms = ZSCharacterCatalog::LoadArms(ArmsIndex))
+	{
+		if (FirstPersonArms->GetSkinnedAsset() != Arms)
+		{
+			FirstPersonArms->ArmsMesh = Arms;
+			FirstPersonArms->SetArmsMesh(Arms);
+		}
+		if (AnimatedArms->GetSkinnedAsset() != Arms)
+		{
+			AnimatedArms->SetSkeletalMeshAsset(Arms);
+		}
+	}
+	ZSCharacterCatalog::ApplyTint(FirstPersonArms, Tint);
+	ZSCharacterCatalog::ApplyTint(AnimatedArms, Tint);
+	// Re-show the right arms for the held weapon (SetArmsMesh changes visibility).
+	if (WeaponComponent && WeaponComponent->GetCurrentWeapon())
+	{
+		WeaponComponent->SetupArmsFor(WeaponComponent->GetCurrentWeapon());
+	}
+	else
+	{
+		FirstPersonArms->SetVisibility(false);
+	}
+}
+
+void AZSPlayerCharacter::UpdateBodyAnim()
+{
+	const bool bRun = GetVelocity().Size2D() > 120.f;
+	if (bRun != bBodyRunning && GetMesh()->GetSkinnedAsset())
+	{
+		bBodyRunning = bRun;
+		if (UAnimSequence* Anim = bRun ? BodyRun.Get() : BodyIdle.Get())
+		{
+			GetMesh()->PlayAnimation(Anim, true);
+		}
+	}
+}
+
+void AZSPlayerCharacter::SetThirdPerson(bool bEnable)
+{
+	bThirdPerson = bEnable;
+	ShoulderCamera->SetActive(bEnable);
+	FirstPersonCamera->SetActive(!bEnable);
+	GetMesh()->SetOwnerNoSee(!bEnable);
+	ViewModelRoot->SetVisibility(!bEnable, true);
+	FirstPersonArms->SetHiddenInGame(bEnable);
+	AnimatedArms->SetHiddenInGame(bEnable);
 }
 
 // =============================================================================================
@@ -100,6 +217,7 @@ void AZSPlayerCharacter::BeginPlay()
 void AZSPlayerCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	UpdateBodyAnim();
 
 	UZSMovementComponent* Move = GetZSMovement();
 

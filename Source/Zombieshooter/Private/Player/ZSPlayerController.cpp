@@ -218,6 +218,11 @@ void AZSPlayerController::StartAutoShotIfRequested()
 			GetWorldTimerManager().SetTimer(TeleportTimer, FTimerDelegate::CreateWeakLambda(this, [this, Where]() { if (APawn* P = GetPawn()) { const bool bOk = P->TeleportTo(Where, P->GetActorRotation()); UE_LOG(LogZS, Warning, TEXT("Teleport %s -> %s"), bOk ? TEXT("ok") : TEXT("FAILED"), *P->GetActorLocation().ToCompactString()); } }), 0.7f, false);
 		}
 	}
+	if (FParse::Param(Cmd, TEXT("ZSAutoThirdPerson")))
+	{
+		FTimerHandle TPTimer;
+		GetWorldTimerManager().SetTimer(TPTimer, FTimerDelegate::CreateWeakLambda(this, [this]() { ZSThirdPerson(); }), 1.0f, false);
+	}
 	// Bunker menus: -ZSAutoMenu=Map|Armory|Market|Character|Missions [-ZSAutoMenuKeys=DDC] (D down, U up, C confirm, B back).
 	int32 AutoCash = 0;
 	if (FParse::Value(Cmd, TEXT("ZSAutoCash="), AutoCash)) { ZSGiveCash(AutoCash); }
@@ -431,7 +436,9 @@ void AZSPlayerController::PopMenu()
 {
 	if (MenuStack.Num() > 0)
 	{
+		const TFunction<void()> Closed = MenuStack.Last().OnClosed;
 		MenuStack.Pop();
+		if (Closed) { Closed(); }
 		if (MenuStack.Num() > 0 && MenuStack.Last().Refresh)
 		{
 			MenuStack.Last().Refresh(MenuStack.Last());
@@ -442,7 +449,13 @@ void AZSPlayerController::PopMenu()
 
 void AZSPlayerController::CloseAllMenus()
 {
+	TArray<TFunction<void()>> Closed;
+	for (int32 i = MenuStack.Num() - 1; i >= 0; --i)
+	{
+		if (MenuStack[i].OnClosed) { Closed.Add(MenuStack[i].OnClosed); }
+	}
 	MenuStack.Reset();
+	for (const TFunction<void()>& F : Closed) { F(); }
 	bConfirmAbandon = false;
 	ApplyMenuInputMode();
 }
@@ -623,5 +636,13 @@ void AZSPlayerController::ZSWinRun()
 	if (AZSGameMode_Survival* GM = GetWorld()->GetAuthGameMode<AZSGameMode_Survival>())
 	{
 		GM->EndRun(EZSRunOutcome::Won);
+	}
+}
+
+void AZSPlayerController::ZSThirdPerson()
+{
+	if (AZSPlayerCharacter* Char = Cast<AZSPlayerCharacter>(GetPawn()))
+	{
+		Char->SetThirdPerson(!Char->IsThirdPerson());
 	}
 }

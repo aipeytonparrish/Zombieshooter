@@ -134,8 +134,10 @@ private:
 	// ---- Setup ----
 	void SpawnDefaultWeapons();
 	void EquipIndex(int32 Index, bool bInstant);
+public:
 	/** Animated weapons: show the follower arms on the weapon's driver rig; otherwise the code-posed arms. */
 	void SetupArmsFor(AZSWeaponBase* Weapon);
+private:
 	void UpdateAnimatedViewModel(float DeltaTime, const FRotator& PlayerLookDelta);
 
 	// ---- Firing ----

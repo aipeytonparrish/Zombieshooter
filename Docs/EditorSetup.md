@@ -391,3 +391,19 @@ To play survival directly in the editor, open `L_ZSTest` and press Play as befor
 | Light Stock | Stock | $400 | 6 | −15 % ADS time and moving spread, +5 % recoil |
 
 Prices, levels and stats live in `Source/Zombieshooter/Private/Weapons/ZSWeaponCatalog.cpp` (DataTables later).
+
+## Milestone 9 — Character creator
+
+Bunker → **LOCKER**. The camera swings to your survivor standing next to the bench.
+
+- **Survivor:** 5 bodies from the Survivors Mega Pack (Gas-Mask Scout, Street Runner, Salvager, Hazmat Worker, Night
+  Watch). Some unlock with level (3, 6, 10).
+- **Match gloves to outfit:** ON picks gloves + tint that suit the body. Turn it OFF to choose your own:
+- **Gloves:** the 11 AAA FPS Gloves arm sets (more unlock at levels 2, 5, 8).
+- **Glove tint:** Factory, Blackout, Olive, Desert Tan, Navy, Blood Red, Arctic, Urban Grey.
+
+Your choice is saved in the profile and is **never lost** on a failed run. In a run your first-person arms use the
+chosen gloves and tint, and the survivor body casts your shadow.
+
+**Over-the-shoulder camera (experiment):** type `ZSThirdPerson` in the console to toggle a third-person view of your
+survivor (idle / run animations only, no aiming poses yet). First person stays the real game camera.

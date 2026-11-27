@@ -32,4 +32,8 @@ struct FZSMenuPage
 	TFunction<void(FZSMenuPage&)> Refresh;
 	/** True for the pause menu (the game is paused while it's open). */
 	bool bPausesGame = false;
+	/** No detail panel (e.g. the locker, where the preview is on the right). */
+	bool bHideDetail = false;
+	/** Called when the page leaves the stack (back or close-all). */
+	TFunction<void()> OnClosed;
 };

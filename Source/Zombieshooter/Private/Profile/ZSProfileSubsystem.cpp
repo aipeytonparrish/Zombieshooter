@@ -111,7 +111,7 @@ const FZSCharacterLook& UZSProfileSubsystem::GetLook() const
 
 void UZSProfileSubsystem::SetLook(const FZSCharacterLook& Look)
 {
-	if (Profile) { Profile->Look = Look; Save(); }
+	if (Profile) { Profile->Look = Look; Save(); OnLookChanged.Broadcast(); }
 }
 
 // ---- Inventory ------------------------------------------------------------------------------

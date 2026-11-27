@@ -6,6 +6,10 @@
 #include "Weapons/ZSWeaponBase.h"
 #include "UI/ZSHUD.h"
 #include "Kismet/GameplayStatics.h"
+#include "Bunker/ZSStation.h"
+#include "Core/ZSCharacterCatalog.h"
+#include "Camera/CameraComponent.h"
+#include "EngineUtils.h"
 #include "Zombieshooter.h"
 
 namespace ZSBunkerMenus
@@ -379,7 +383,102 @@ namespace ZSBunkerMenus
 	void OpenCharacter(AZSPlayerController* PC)
 	{
 		if (!PC) { return; }
-		PlaceholderPage(PC, NSLOCTEXT("ZS", "St_Character", "LOCKER"), NSLOCTEXT("ZS", "LockerSoon", "Character creator coming soon."));
+		FWeakPC WeakPC(PC);
+
+		// Look through the locker's preview camera while the menu is open.
+		AZSStation* Locker = nullptr;
+		for (TActorIterator<AZSStation> It(PC->GetWorld()); It; ++It)
+		{
+			if (It->Type == EZSStationType::Character) { Locker = *It; break; }
+		}
+
+		FZSMenuPage Page;
+		Page.Title = NSLOCTEXT("ZS", "LockerTitle", "LOCKER");
+		Page.bHideDetail = true;
+		if (Locker)
+		{
+			Locker->GetPreviewCamera()->SetActive(true);
+			PC->SetViewTargetWithBlend(Locker, 0.4f, VTBlend_Cubic);
+			TWeakObjectPtr<AZSStation> WeakLocker(Locker);
+			Page.OnClosed = [WeakPC, WeakLocker]()
+			{
+				if (WeakPC.IsValid() && WeakPC->GetPawn()) { WeakPC->SetViewTargetWithBlend(WeakPC->GetPawn(), 0.3f, VTBlend_Cubic); }
+				if (WeakLocker.IsValid()) { WeakLocker->GetPreviewCamera()->SetActive(false); }
+			};
+		}
+
+		// Cycle to the next unlocked entry.
+		auto Next = [](int32 Current, int32 Count, TFunctionRef<bool(int32)> Unlocked)
+		{
+			for (int32 Step = 1; Step <= Count; ++Step)
+			{
+				const int32 I = (Current + Step) % Count;
+				if (Unlocked(I)) { return I; }
+			}
+			return Current;
+		};
+
+		Page.Refresh = [WeakPC, Next](FZSMenuPage& P)
+		{
+			UZSProfileSubsystem* Profile = ProfileOf(WeakPC);
+			if (!Profile) { return; }
+			const FZSCharacterLook Look = Profile->GetLook();
+			const int32 Level = Profile->GetLevel();
+			const auto& Bodies = ZSCharacterCatalog::Bodies();
+			const auto& Arms = ZSCharacterCatalog::Arms();
+			const auto& Tints = ZSCharacterCatalog::Tints();
+			int32 BodiesUnlocked = 0, ArmsUnlocked = 0;
+			for (const auto& B : Bodies) { BodiesUnlocked += Level >= B.RequiredLevel; }
+			for (const auto& A : Arms) { ArmsUnlocked += Level >= A.RequiredLevel; }
+			P.Subtitle = FText::Format(NSLOCTEXT("ZS", "LockerSub", "Select to change. Outfits are never lost.   Bodies {0}/{1}   Gloves {2}/{3} (more unlock as you level)"),
+				FText::AsNumber(BodiesUnlocked), FText::AsNumber(Bodies.Num()), FText::AsNumber(ArmsUnlocked), FText::AsNumber(Arms.Num()));
+			P.Items.Reset();
+
+			const int32 ArmsShown = ZSCharacterCatalog::ResolveArms(Look);
+			const int32 TintShown = ZSCharacterCatalog::ResolveTint(Look);
+			P.Items.Emplace(NSLOCTEXT("ZS", "LkBody", "SURVIVOR"), [WeakPC, Next]()
+			{
+				UZSProfileSubsystem* Pr = ProfileOf(WeakPC);
+				if (!Pr) { return; }
+				FZSCharacterLook L = Pr->GetLook();
+				const int32 Lvl = Pr->GetLevel();
+				L.Body = Next(L.Body, ZSCharacterCatalog::Bodies().Num(), [Lvl](int32 I) { return Lvl >= ZSCharacterCatalog::Bodies()[I].RequiredLevel; });
+				Pr->SetLook(L);
+			}, Bodies.IsValidIndex(Look.Body) ? Bodies[Look.Body].DisplayName : FText::GetEmpty());
+			P.Items.Emplace(NSLOCTEXT("ZS", "LkMatch", "MATCH GLOVES TO OUTFIT"), [WeakPC]()
+			{
+				UZSProfileSubsystem* Pr = ProfileOf(WeakPC);
+				if (!Pr) { return; }
+				FZSCharacterLook L = Pr->GetLook();
+				if (L.bMatchArms)
+				{
+					// Start custom from what the outfit was showing.
+					L.Arms = ZSCharacterCatalog::ResolveArms(L);
+					L.Tint = ZSCharacterCatalog::ResolveTint(L);
+				}
+				L.bMatchArms = !L.bMatchArms;
+				Pr->SetLook(L);
+			}, Look.bMatchArms ? NSLOCTEXT("ZS", "On", "ON") : NSLOCTEXT("ZS", "Off", "OFF"));
+			P.Items.Emplace(NSLOCTEXT("ZS", "LkArms", "GLOVES"), [WeakPC, Next]()
+			{
+				UZSProfileSubsystem* Pr = ProfileOf(WeakPC);
+				if (!Pr) { return; }
+				FZSCharacterLook L = Pr->GetLook();
+				const int32 Lvl = Pr->GetLevel();
+				L.Arms = Next(L.Arms, ZSCharacterCatalog::Arms().Num(), [Lvl](int32 I) { return Lvl >= ZSCharacterCatalog::Arms()[I].RequiredLevel; });
+				Pr->SetLook(L);
+			}, Arms[ArmsShown].DisplayName, FText::GetEmpty(), !Look.bMatchArms);
+			P.Items.Emplace(NSLOCTEXT("ZS", "LkTint", "GLOVE TINT"), [WeakPC]()
+			{
+				UZSProfileSubsystem* Pr = ProfileOf(WeakPC);
+				if (!Pr) { return; }
+				FZSCharacterLook L = Pr->GetLook();
+				L.Tint = (L.Tint + 1) % ZSCharacterCatalog::Tints().Num();
+				Pr->SetLook(L);
+			}, Tints[TintShown].DisplayName, FText::GetEmpty(), !Look.bMatchArms);
+			P.Items.Add(BackItem(WeakPC));
+		};
+		PC->PushMenu(Page);
 	}
 
 	void OpenMissions(AZSPlayerController* PC)

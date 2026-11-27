@@ -8,6 +8,11 @@
 #include "Components/PointLightComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Camera/CameraComponent.h"
+#include "Animation/AnimSequence.h"
+#include "Core/ZSCharacterCatalog.h"
+#include "Profile/ZSProfileSubsystem.h"
 
 namespace
 {
@@ -51,6 +56,18 @@ AZSStation::AZSStation()
 	Lamp->SetIntensity(60.f);
 	Lamp->SetAttenuationRadius(500.f);
 	Lamp->SetLightColor(FLinearColor(1.f, 0.82f, 0.6f));
+
+	// Locker only: a survivor standing beside the bench, and a camera framing them on the right of the screen.
+	Preview = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Preview"));
+	Preview->SetupAttachment(Collision);
+	Preview->SetRelativeLocationAndRotation(FVector(0.f, -150.f, -50.f), FRotator(0.f, 90.f, 0.f));
+	Preview->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Preview->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+	PreviewCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("PreviewCamera"));
+	PreviewCamera->SetupAttachment(Collision);
+	PreviewCamera->SetRelativeLocationAndRotation(FVector(-250.f, -215.f, 75.f), FRotator(-6.f, 0.f, 0.f));
+	PreviewCamera->SetFieldOfView(70.f);
+	PreviewCamera->SetAutoActivate(false);
 }
 
 FText AZSStation::StationName(EZSStationType InType)
@@ -89,6 +106,38 @@ void AZSStation::BeginPlay()
 {
 	Super::BeginPlay();
 	ApplyVisuals();   // construction doesn't re-run when a saved level loads in game
+	if (Type == EZSStationType::Character)
+	{
+		RefreshPreview();
+		if (UZSProfileSubsystem* Profile = UZSProfileSubsystem::Get(this))
+		{
+			LookChangedHandle = Profile->OnLookChanged.AddUObject(this, &AZSStation::RefreshPreview);
+		}
+	}
+}
+
+void AZSStation::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UZSProfileSubsystem* Profile = UZSProfileSubsystem::Get(this))
+	{
+		Profile->OnLookChanged.Remove(LookChangedHandle);
+	}
+	Super::EndPlay(EndPlayReason);
+}
+
+void AZSStation::RefreshPreview()
+{
+	const UZSProfileSubsystem* Profile = UZSProfileSubsystem::Get(this);
+	const int32 Body = Profile ? Profile->GetLook().Body : 0;
+	if (USkeletalMesh* Mesh = ZSCharacterCatalog::LoadBody(Body))
+	{
+		Preview->SetSkeletalMeshAsset(Mesh);
+		Preview->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+		if (UAnimSequence* Idle = ZSCharacterCatalog::LoadIdle(Body))
+		{
+			Preview->PlayAnimation(Idle, true);
+		}
+	}
 }
 
 void AZSStation::ApplyVisuals()
@@ -109,6 +158,7 @@ void AZSStation::ApplyVisuals()
 
 	PropA->SetStaticMesh(nullptr);
 	PropB->SetStaticMesh(nullptr);
+	Preview->SetVisibility(Type == EZSStationType::Character);
 	switch (Type)
 	{
 	case EZSStationType::Armory:

@@ -13,6 +13,7 @@
 #include "Sound/SoundBase.h"
 #include "Rounds/ZSGameMode_Survival.h"
 #include "Zombieshooter.h"
+#include "UI/ZSHUD.h"
 
 namespace
 {
@@ -72,10 +73,11 @@ FZSRoundTuning UZSRoundManagerComponent::GetTuning(int32 Round) const
 	// Built-in formulas (also what Data/ZSRounds.csv was generated from). ~1,000 zombies over 20 rounds.
 	T.ZombieCount = FMath::RoundToInt((6.f + 2.6f * R + 0.12f * R * R) * 1.25f);   // x1.25: run length tuning (M12)
 	T.HealthMultiplier = 1.f + 0.1f * (R - 1.f);
-	T.SpeedMultiplier = FMath::Min(1.3f, 1.f + 0.015f * (R - 1.f));
-	T.RunnerChance = FMath::Clamp((R - 2.f) * 0.035f, 0.f, 0.6f);
-	T.SpawnInterval = FMath::Max(0.35f, 2.f - 0.08f * (R - 1.f));
-	T.MaxAlive = FMath::Min(32, FMath::RoundToInt(8.f + 1.5f * R));
+	// Intensity pass: a denser, faster horde from round 1 (more alive at once, quicker spawns, sprinters from round 2).
+	T.SpeedMultiplier = FMath::Min(1.4f, 1.f + 0.02f * (R - 1.f));
+	T.RunnerChance = FMath::Clamp((R - 1.f) * 0.05f, 0.f, 0.65f);
+	T.SpawnInterval = FMath::Max(0.3f, 1.4f - 0.07f * (R - 1.f));
+	T.MaxAlive = FMath::Min(32, FMath::RoundToInt(12.f + 2.f * R));
 
 	if (LoadedCurves)
 	{
@@ -125,10 +127,25 @@ void UZSRoundManagerComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 
 	case EZSRoundPhase::Active:
 		SpawnTimer -= DeltaTime;
-		if (ToSpawn > 0 && Alive < Tuning.MaxAlive && SpawnTimer <= 0.f)
+		if (GS->Round >= SurgeFromRound && !bBossRound)
 		{
+			SurgeTimer -= DeltaTime;
+			if (SurgeTimer <= 0.f)
+			{
+				SurgeTimer = SurgeInterval * FMath::FRandRange(0.8f, 1.2f);
+				if (ToSpawn >= 4)
+				{
+					StartSurge();
+				}
+			}
+		}
+		// A surge pours its zombies in quickly and may go a few over the live cap.
+		if (ToSpawn > 0 && Alive < Tuning.MaxAlive + (SurgeLeft > 0 ? 6 : 0) && SpawnTimer <= 0.f)
+		{
+			const bool bSurging = SurgeLeft > 0;
 			SpawnOne();
-			SpawnTimer = Tuning.SpawnInterval * FMath::FRandRange(0.7f, 1.3f);
+			SurgeLeft = FMath::Max(0, SurgeLeft - 1);
+			SpawnTimer = bSurging ? 0.2f : Tuning.SpawnInterval * FMath::FRandRange(0.7f, 1.3f);
 		}
 		GS->ZombiesRemaining = ToSpawn + Alive;
 		if (ToSpawn <= 0 && Alive <= 0 && !bBossRound)
@@ -173,6 +190,8 @@ void UZSRoundManagerComponent::StartRound(int32 Round)
 		Tuning.MaxAlive = FMath::Min(Tuning.MaxAlive, 18);
 	}
 	SpawnTimer = 0.5f;
+	SurgeTimer = 9.f;   // first surge early, while most of the round is still to come
+	SurgeLeft = 0;
 	GS->Round = Round;
 	GS->Phase = EZSRoundPhase::Active;
 	GS->RoundStartTime = GetWorld()->GetTimeSeconds();
@@ -209,6 +228,41 @@ void UZSRoundManagerComponent::SkipToRound(int32 Round)
 		GS->Round = FMath::Max(0, Round - 1);
 	}
 	StartRound(FMath::Max(1, Round));
+}
+
+void UZSRoundManagerComponent::StartSurge()
+{
+	const AZSGameState_Survival* GS = GetState();
+	const int32 Round = GS ? GS->Round : 1;
+	SurgeLeft = FMath::Min(ToSpawn, 4 + Round / 3);
+	PlayStinger(RoundStartSound, 0.3f, 0.85f);
+	AZSHUD::Toast(GetPlayerPawn(), NSLOCTEXT("ZS", "HordeSurge", "HORDE INCOMING"));
+	UE_LOG(LogZS, Log, TEXT("Horde surge: %d zombies"), SurgeLeft);
+}
+
+void UZSRoundManagerComponent::OpenZone(FName Zone)
+{
+	if (!Zone.IsNone())
+	{
+		OpenZones.Add(Zone);
+		UE_LOG(LogZS, Log, TEXT("Zone opened: %s"), *Zone.ToString());
+	}
+}
+
+bool UZSRoundManagerComponent::RelocateStraggler(AZSZombieBase* Zombie)
+{
+	if (!Zombie || Zombie->IsDead() || IsVisibleToPlayer(Zombie->GetActorLocation()))
+	{
+		return false;
+	}
+	FVector Loc;
+	FRotator Rot;
+	bool bRunners = true;
+	if (!PickSpawnLocation(Loc, Rot, bRunners))
+	{
+		return false;
+	}
+	return Zombie->TeleportTo(Loc, Rot);
 }
 
 void UZSRoundManagerComponent::PlayStinger(USoundBase* Sound, float Volume, float Pitch) const
@@ -257,19 +311,23 @@ bool UZSRoundManagerComponent::PickSpawnLocation(FVector& OutLocation, FRotator&
 		// Valid = enabled, in the distance band, out of view. Pick randomly among the closest few so the horde
 		// arrives from varied directions without spawning on the far side of the map.
 		TArray<TPair<float, const AZSSpawnPoint*>> Valid;
+		TArray<const AZSSpawnPoint*> AnyOpen;   // last resort: an open point even if the player can see it
 		const AZSSpawnPoint* Fallback = nullptr;
 		float FallbackDist = 0.f;
+		bool bZoned = false;
 		for (const AZSSpawnPoint* SP : SpawnPoints)
 		{
-			if (!SP || !SP->bEnabled)
+			bZoned |= SP && !SP->Zone.IsNone();
+			if (!SP || !SP->bEnabled || !IsZoneOpen(SP->Zone))
 			{
 				continue;
 			}
 			const float D = FVector::Dist(SP->GetActorLocation(), P);
-			if (D < MinSpawnDistance)
+			if (D < (SP->MinPlayerDistance >= 0.f ? SP->MinPlayerDistance : MinSpawnDistance))
 			{
 				continue;
 			}
+			AnyOpen.Add(SP);
 			if (IsVisibleToPlayer(SP->GetActorLocation()))
 			{
 				continue;
@@ -286,6 +344,10 @@ bool UZSRoundManagerComponent::PickSpawnLocation(FVector& OutLocation, FRotator&
 		}
 		Valid.Sort([](const TPair<float, const AZSSpawnPoint*>& A, const TPair<float, const AZSSpawnPoint*>& B) { return A.Key < B.Key; });
 		const AZSSpawnPoint* Chosen = Valid.Num() > 0 ? Valid[FMath::RandRange(0, FMath::Min(Valid.Num(), 4) - 1)].Value : Fallback;
+		if (!Chosen && AnyOpen.Num() > 0)
+		{
+			Chosen = AnyOpen[FMath::RandRange(0, AnyOpen.Num() - 1)];
+		}
 		if (Chosen)
 		{
 			// Small jitter so a group from one point doesn't stack.
@@ -293,6 +355,10 @@ bool UZSRoundManagerComponent::PickSpawnLocation(FVector& OutLocation, FRotator&
 			OutRotation = FRotator(0.f, (P - OutLocation).Rotation().Yaw, 0.f);
 			bOutAllowRunners = Chosen->bAllowRunners;
 			return true;
+		}
+		if (bZoned)
+		{
+			return false;   // a ring could land outside the opened area (behind a closed door)
 		}
 	}
 
@@ -339,7 +405,8 @@ void UZSRoundManagerComponent::SpawnOne()
 		UE_LOG(LogZS, Warning, TEXT("SpawnOne: spawn blocked at %s"), *Loc.ToCompactString());
 		return;
 	}
-	Z->ZombieType = (bAllowRunners && FMath::FRand() < Tuning.RunnerChance) ? EZSZombieType::Runner : EZSZombieType::Walker;
+	const float RunnerChance = Tuning.RunnerChance + (SurgeLeft > 0 ? 0.25f : 0.f);   // surges bring sprinters
+	Z->ZombieType = (bAllowRunners && FMath::FRand() < RunnerChance) ? EZSZombieType::Runner : EZSZombieType::Walker;
 	// Specials join from round 4 on (Brutes from round 10, at most 2 alive).
 	if (const AZSGameState_Survival* RoundGS = GetState())
 	{

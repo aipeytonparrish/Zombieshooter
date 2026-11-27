@@ -13,7 +13,7 @@ restored (see the bottom of this file) before maps that use them will look right
 
 | Content folder | Pack | Made in | What's inside | Skeleton | Used for |
 |---|---|---|---|---|---|
-| `MS_NewYorkCityKitbash_Assets/` | NYC Kitbash (Megascans) | UE 5.3 | 15 modular building bases + ~210 props: street pieces, signs (31), lights (16), trash/cans, AC units, rooftop parts, trees, traffic lights, billboards, stairs, cranes, water tanks, hydrants, benches, bus stops, mailbox, guardrails. Demo map. | — | City level (graybox dressing now, art pass M14) |
+| `MS_NewYorkCityKitbash_Assets/` | NYC Kitbash (Megascans) | UE 5.3 | 15 modular building bases + ~210 props: street pieces, signs (31), lights (16), trash/cans, AC units, rooftop parts, trees, traffic lights, billboards, stairs, cranes, water tanks, hydrants, benches, bus stops, mailbox, guardrails. Demo map. | — | New York level: buildings 04/06/07/10/12–15 line the street and form the skyline |
 | `RoadPack01/` | Road Pack | UE 5.5 | 14+ road / sidewalk / intersection meshes, electricity box. Demo map `RoadPack01Map`. | — | City streets |
 | `ZombieCity01/` | Zombie City 01 | UE 5.0 | Zombie mesh `SK_ZombieCity01` + separated parts (body, hoodie, pants, shirt, t-shirt) | **UE4 Mannequin** (`SKEL_ZombieCity01`) | Walker / Runner bodies (M4), modular variety |
 | `ZombieDoctor/` | Zombie Doctor | UE 5.0 | `SK_ZombieDoctor` + separated parts (body, robe, shirt, tie, pants, belt, shoes, accessories) | **UE4 Mannequin** (`SKEL_ZombieDoctor`) | Zombie variant (M4/M11) |
@@ -120,10 +120,17 @@ Source: `post-apocalyptic-abandoned-city-new-york.zip` (Desktop / Downloads): a 
 (`Post-apocalyptic_NY.blend`, 1,350 objects, 9.3M polys) plus `textures.rar`. Pipeline (all scripted, re-runnable):
 1. Extract the zip and the textures rar into `Desktop/Enviorments Assets/_extract/PostApocNY/`.
 2. `blender -b --disable-autoexec Post-apocalyptic_NY.blend --python Tools/Import/blender_export_postapoc_ny.py -- <textures> <export dir>`:
-   relinks textures, drops the sky dome / grass particles / camera, decimates the 312k-tri debris piles, merges
-   everything into ~70 meshes (per collection and 25 m cell), exports glTF.
+   relinks textures, drops the sky dome / grass particles / camera, merges everything into ~70 meshes (per
+   collection and 25 m cell) at full detail (no decimation: Nanite renders it), exports glTF.
 3. `Tools/Import/import_postapoc_ny.py` imports it (Nanite, complex collision) into `Content/NYC_PostApoc/`
    (git-ignored) and places it in `/Game/NYC_PostApoc/Maps/L_NYC_Art`.
-4. `Tools/Import/create_nyc_map.py` builds our `L_NYC` (weather, gameplay actors) which streams the art level.
+   It also removes the scene's "Buildings out of scene" placeholder shells and gives the materials whose textures
+   are missing (windows, cables, tanks) flat colours (`--tune-only` / `--materials-only` re-run just those steps).
+4. Safehouse kit: unpack `industrial-survival-horror-modular-kit.zip` and its `..._glTF.zip` into
+   `Desktop/Enviorments Assets/_extract/IndustrialKit/`, then `Tools/Import/import_industrial_kit.py <glTF dir>`
+   → `Content/IndustrialKit/` (git-ignored, complex collision).
+5. `Tools/Import/prepare_kitbash_buildings.py`: Nanite + collision on the Megascans NYC kitbash buildings.
+6. `Tools/Import/create_nyc_map.py` builds our `L_NYC` (weather, safehouse, kitbash backdrop buildings, gameplay
+   actors) which streams the art level.
 10 small Textures.com maps referenced by the .blend were not in the archive (a marble floor, a worn wall); those
 surfaces import without them.

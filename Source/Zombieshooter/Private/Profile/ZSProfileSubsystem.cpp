@@ -6,6 +6,8 @@
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Zombieshooter.h"
 
 const TCHAR* UZSProfileSubsystem::SlotName = TEXT("Profile0");
@@ -60,6 +62,15 @@ void UZSProfileSubsystem::Load()
 
 void UZSProfileSubsystem::Save()
 {
+#if !UE_BUILD_SHIPPING
+	// Automated screenshot / test launches (-ZSAutoShot=...) quit mid-run; they must never touch the player's save
+	// (the next launch would count it as a force quit and take the deployed weapons).
+	static const bool bReadOnly = FCString::Strifind(FCommandLine::Get(), TEXT("ZSAutoShot=")) != nullptr || FParse::Param(FCommandLine::Get(), TEXT("ZSNoSave"));
+	if (bReadOnly)
+	{
+		return;
+	}
+#endif
 	if (Profile)
 	{
 		UGameplayStatics::SaveGameToSlot(Profile, SlotName, 0);

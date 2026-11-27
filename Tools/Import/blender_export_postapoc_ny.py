@@ -19,7 +19,7 @@ import bpy
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 TEX = argv[0] if len(argv) > 0 else ""
 OUT = argv[1] if len(argv) > 1 else os.path.join(os.path.dirname(bpy.data.filepath), "export")
-MAX_TRIS = 40000           # per mesh after decimation
+MAX_TRIS = 1500000         # per mesh after decimation (Nanite renders the rest at full detail)
 DROP_COLLECTIONS = {"Background Sky", "GScatter"}
 
 os.makedirs(OUT, exist_ok=True)

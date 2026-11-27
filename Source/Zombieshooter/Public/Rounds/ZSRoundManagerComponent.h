@@ -52,10 +52,10 @@ public:
 	int32 MaxAliveCeiling = 32;
 
 	UPROPERTY(EditAnywhere, Category = "ZS|Spawning", meta = (ForceUnits = "cm"))
-	float MinSpawnDistance = 1200.f;
+	float MinSpawnDistance = 900.f;
 
 	UPROPERTY(EditAnywhere, Category = "ZS|Spawning", meta = (ForceUnits = "cm"))
-	float MaxSpawnDistance = 4500.f;
+	float MaxSpawnDistance = 3500.f;
 
 	/** Chance a killed zombie drops a pickup, and the split between health and armor. */
 	UPROPERTY(EditAnywhere, Category = "ZS|Pickups")
@@ -92,6 +92,20 @@ public:
 	/** Debug: jump straight to a round (kills the current zombies). */
 	void SkipToRound(int32 Round);
 
+	/** Zones (AZSSpawnPoint::Zone) opened by bought doors. */
+	void OpenZone(FName Zone);
+	bool IsZoneOpen(FName Zone) const { return Zone.IsNone() || OpenZones.Contains(Zone); }
+
+	/** A zombie that has made no progress towards the player for a while (stuck on debris, lost behind a wall) is
+	 *  moved to a fresh spawn point out of view. Returns false if it was left where it is (no point, or visible). */
+	bool RelocateStraggler(AZSZombieBase* Zombie);
+
+	/** Horde surges: from this round on, every SurgeInterval seconds of a round a burst of zombies arrives at once. */
+	UPROPERTY(EditAnywhere, Category = "ZS|Rounds")
+	int32 SurgeFromRound = 3;
+	UPROPERTY(EditAnywhere, Category = "ZS|Rounds", meta = (ForceUnits = "s"))
+	float SurgeInterval = 30.f;
+
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 protected:
@@ -116,6 +130,10 @@ private:
 	TArray<TObjectPtr<AZSSpawnPoint>> SpawnPoints;
 
 	FZSRoundTuning Tuning;
+	TSet<FName> OpenZones;
+	float SurgeTimer = 0.f;
+	int32 SurgeLeft = 0;
+	void StartSurge();
 	int32 ToSpawn = 0;
 	bool bBossRound = false;
 	void SpawnBoss();

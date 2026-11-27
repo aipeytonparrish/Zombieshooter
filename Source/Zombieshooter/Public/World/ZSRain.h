@@ -5,6 +5,7 @@
 #include "ZSRain.generated.h"
 
 class UInstancedStaticMeshComponent;
+class USoundBase;
 
 /**
  * Cheap rain: thin instanced streaks (M_ZS_Rain) simulated in world space inside a box around the local player's
@@ -46,7 +47,34 @@ public:
 	UPROPERTY(EditAnywhere, Category = "ZS|Rain")
 	float Wind = 0.12f;
 
+	/** World-space boxes with a roof (building interiors): no drops inside them. */
+	UPROPERTY(EditAnywhere, Category = "ZS|Rain")
+	TArray<FBox> ShelterBoxes;
+
+	/** Storm: random lightning flashes (the level's directional and sky lights spike briefly). */
+	UPROPERTY(EditAnywhere, Category = "ZS|Rain|Lightning")
+	bool bLightning = true;
+	UPROPERTY(EditAnywhere, Category = "ZS|Rain|Lightning", meta = (ForceUnits = "s"))
+	FVector2D LightningInterval = FVector2D(14.f, 35.f);
+	UPROPERTY(EditAnywhere, Category = "ZS|Rain|Lightning")
+	float LightningBoost = 7.f;
+	UPROPERTY(EditAnywhere, Category = "ZS|Rain|Lightning")
+	TObjectPtr<USoundBase> ThunderSound;
+
 private:
+	void UpdateLightning(float DeltaSeconds);
+	bool IsSheltered(const FVector& P) const;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UDirectionalLightComponent> Sun;
+	UPROPERTY(Transient)
+	TObjectPtr<class USkyLightComponent> Sky;
+	float SunBase = 0.f;
+	float SkyBase = 0.f;
+	float NextFlash = 0.f;
+	float FlashTime = -1.f;
+	float ThunderDelay = -1.f;
+
 	FTransform DropTransform(int32 Index) const;
 
 	UPROPERTY(VisibleAnywhere)

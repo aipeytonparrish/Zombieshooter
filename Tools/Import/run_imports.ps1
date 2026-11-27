@@ -32,8 +32,9 @@ Write-Host "== create_bunker_map.py"
     ForEach-Object { $_.Line -replace '^\[[^\]]*\]\[[^\]]*\]', '' }
 
 # FX materials (glow, rain) and the New York level (ours, versioned; its art is imported separately, see
-# Docs/ThirdPartyAssets.md "New York level": blender_export_postapoc_ny.py then import_postapoc_ny.py).
-foreach ($s in @("create_fx_materials.py", "create_nyc_map.py")) {
+# Docs/ThirdPartyAssets.md "New York level": blender_export_postapoc_ny.py, import_postapoc_ny.py and
+# import_industrial_kit.py for the safehouse; prepare_kitbash_buildings.py readies the kitbash backdrop buildings).
+foreach ($s in @("create_fx_materials.py", "prepare_kitbash_buildings.py", "create_nyc_map.py")) {
     if ($s -eq "create_nyc_map.py") {
         $nyc = Join-Path $PSScriptRoot "..\..\Content\ZS\Maps\L_NYC.umap"
         if (Test-Path $nyc) { Remove-Item $nyc -Force }

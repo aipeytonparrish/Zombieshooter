@@ -150,6 +150,9 @@ struct FZSWeaponAnimSet
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rig") FName CameraSocket;
 	/** Camera transform relative to CameraSocket (as authored in the pack's demo character). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rig") FTransform CameraFromSocket;
+	/** Extra view-space offset (X forward, Y right, Z up, cm) blended in while aiming: moves the sights to a comfortable eye
+	 *  distance and puts the sight picture on the screen centre. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rig") FVector ADSViewOffset = FVector::ZeroVector;
 	/** Used when CameraSocket is None: fixed driver transform relative to the camera. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rig") FTransform DriverRelativeToCamera;
 

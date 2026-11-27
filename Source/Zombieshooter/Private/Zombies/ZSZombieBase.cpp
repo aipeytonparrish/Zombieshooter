@@ -27,6 +27,8 @@
 #include "GameFramework/DamageType.h"
 #include "EngineUtils.h"
 #include "Zombieshooter.h"
+#include "Rounds/ZSGameMode_Survival.h"
+#include "Rounds/ZSRoundManagerComponent.h"
 
 int32 AZSZombieBase::LiveCount = 0;
 
@@ -396,6 +398,28 @@ void AZSZombieBase::UpdateChase(float DeltaSeconds)
 	{
 		StartAttack();
 		return;
+	}
+
+	// Stragglers: no real progress towards the player for a while (stuck on debris, lost behind a wall) -> the round
+	// manager moves them to a fresh spawn point out of view.
+	ProgressTimer += DeltaSeconds;
+	if (ProgressTimer >= 8.f)
+	{
+		const bool bNoProgress = Dist2D > 700.f && Dist2D > ProgressStartDist - 150.f;
+		ProgressTimer = 0.f;
+		ProgressStartDist = Dist2D;
+		if (bNoProgress && !IsBoss())
+		{
+			if (AZSGameMode_Survival* GM = GetWorld()->GetAuthGameMode<AZSGameMode_Survival>())
+			{
+				if (GM->GetRoundManager() && GM->GetRoundManager()->RelocateStraggler(this))
+				{
+					ProgressStartDist = 1.e9f;
+					RepathTimer = 0.f;
+					return;
+				}
+			}
+		}
 	}
 
 	RepathTimer -= DeltaSeconds;

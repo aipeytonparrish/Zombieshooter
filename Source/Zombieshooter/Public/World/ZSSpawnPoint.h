@@ -22,4 +22,14 @@ public:
 	/** Allow runners from this point (e.g. disable for windows they would sprint out of awkwardly). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ZS|Spawn")
 	bool bAllowRunners = true;
+
+	/** Area this point belongs to. None = always open; otherwise it is used only once that zone has been opened (a
+	 *  bought door, see AZSBuyDoor). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ZS|Spawn")
+	FName Zone = NAME_None;
+
+	/** Closest the player may be for this point to be used (cm); < 0 = the round manager's MinSpawnDistance. Small for
+	 *  breach points inside a closed start room. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ZS|Spawn")
+	float MinPlayerDistance = -1.f;
 };

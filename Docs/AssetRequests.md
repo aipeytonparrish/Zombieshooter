@@ -134,7 +134,12 @@ death. Plus **boss music**, roar / slam / footstep sounds, a slam shockwave Niag
 Rain is our own (instanced streaks + `M_ZS_Rain`). Wanted to finish the mood: **rain ambience loop** (street, with
 distant thunder), **rain splash** Niagara / ripple decal for puddles, a **wet-surface** material function or puddle
 decals, and the 10 missing Textures.com maps from the .blend (`TexturesCom_Marble_FanPattern_1K_*`,
-`TexturesCom_Concrete_WornWall_512_*`, `TexturesCom_Pavement_ExposedAggregate_1K_*`) if you still have them.
+`TexturesCom_Concrete_WornWall_512_*`, `TexturesCom_Pavement_ExposedAggregate_1K_*`, and the scene's
+`window shaders.png` / `window shaders normal .png`) if you still have them.
+**Rubble / debris pack** (high-detail concrete rubble piles, broken bricks, rebar; Nanite or high-poly): the
+scene's debris piles are low-poly by design and are the roughest-looking thing left in the street.
+**Thunder** one-shots (2–4 variations) for the lightning, and a **wood / metal barricade break** sound for the
+safehouse door.
 
 ### Later milestones
 City block kit (M14), character creator parts on the Mannequin skeleton (M9), all special

@@ -1227,6 +1227,7 @@ void UZSWeaponComponent::UpdateAnimatedViewModel(float DeltaTime, const FRotator
 	SwayRotation = FMath::RInterpTo(SwayRotation, SwayTarget, DeltaTime, SwayInterpSpeed);
 	Rot += SwayRotation;
 
+	Loc += W->AnimSet.ADSViewOffset * AdsEase;
 	Loc += FVector(-6.f, 0.f, -18.f) * LowerAlpha;
 	Rot.Pitch -= 35.f * LowerAlpha;
 

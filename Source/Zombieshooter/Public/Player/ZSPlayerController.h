@@ -119,6 +119,14 @@ public:
 	UFUNCTION(Exec)
 	void ZSGiveCash(int32 Amount);
 
+	/** Debug: add run cash (this run only; the profile is untouched). */
+	UFUNCTION(Exec)
+	void ZSRunCash(int32 Amount);
+
+	/** Debug: use every buy door in the level (pays its cost from run cash like the player would). */
+	UFUNCTION(Exec)
+	void ZSUseDoors();
+
 	UFUNCTION(Exec)
 	void ZSGiveXP(int32 Amount);
 

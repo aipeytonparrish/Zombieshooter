@@ -46,25 +46,84 @@ def postprocess():
 BACKGROUND = ("NY_City", "NY_CityscapeAcrossRiver", "NY_Buildingsoutofscene", "NY_BuildingBG", "NY_Bridge")
 
 
+# The scene's "Buildings out of scene" are rough low-poly shells (flat shard triangles) meant to stay off camera; in a
+# playable street they sit right along the play area. They are removed and L_NYC puts Megascans kitbash buildings there.
+REMOVE = ("NY_Buildingsoutofscene",)
+
+
 def tune_art_level():
     """Distant backdrop meshes (skyline, far buildings, the 700 m river ground) don't cast shadows: they never
-    shadow the play area and huge Nanite shadow casters made virtual shadow maps hang the GPU."""
+    shadow the play area and huge Nanite shadow casters made virtual shadow maps hang the GPU. Removes REMOVE."""
     les.load_level(ART_MAP)
     n = 0
+    removed = 0
     for a in eas.get_all_level_actors():
         if not isinstance(a, unreal.StaticMeshActor):
+            continue
+        if a.get_actor_label().startswith(REMOVE):
+            eas.destroy_actor(a)
+            removed += 1
             continue
         _, ext = a.get_actor_bounds(False)
         if a.get_actor_label().startswith(BACKGROUND) or max(ext.x, ext.y) > 15000:
             a.static_mesh_component.set_editor_property("cast_shadow", False)
             n += 1
     les.save_current_level()
-    zs.log("shadow casting off on %d backdrop actors" % n)
+    zs.log("shadow casting off on %d backdrop actors, removed %d placeholder shells" % (n, removed))
+
+
+# Materials whose textures are missing from the scene's texture folder (or were procedural in Blender) import as flat
+# white: the brownstone windows ("glass" + "room" interiors), cables, tanks... Give them plausible flat looks.
+#   name: (base colour, metallic, roughness, emissive or None)
+MATERIAL_FIXES = {
+    "glass": ((0.015, 0.018, 0.022), 0.6, 0.08, None),            # dark, glossy window panes
+    "room": ((0.012, 0.011, 0.010), 0.0, 0.9, (0.004, 0.0035, 0.003)),   # dim rooms behind the windows
+    "Material_037": ((0.02, 0.022, 0.025), 0.4, 0.2, None),
+    "Material_052": ((0.02, 0.022, 0.025), 0.4, 0.2, None),
+    "Material_074": ((0.08, 0.08, 0.08), 0.5, 0.5, None),
+    "cables": ((0.015, 0.015, 0.015), 0.0, 0.6, None),
+    "cables_001": ((0.015, 0.015, 0.015), 0.0, 0.6, None),
+    "cables_002": ((0.015, 0.015, 0.015), 0.0, 0.6, None),
+    "cables_003": ((0.015, 0.015, 0.015), 0.0, 0.6, None),
+    "Rusted_Blue__001": ((0.08, 0.11, 0.14), 0.5, 0.7, None),
+    "Rusted_Blue__002": ((0.08, 0.11, 0.14), 0.5, 0.7, None),
+    "Beige_Plastic_001": ((0.42, 0.38, 0.3), 0.0, 0.6, None),
+    "Beige_Plastic_002": ((0.42, 0.38, 0.3), 0.0, 0.6, None),
+    "RustyWaterStorageTank": ((0.22, 0.11, 0.05), 0.6, 0.75, None),
+    "LAMP_LIGHT": ((0.6, 0.55, 0.45), 0.0, 0.4, (0.6, 0.45, 0.25)),
+    # Unlit "rooms behind the window" pictures: daylight photos glowing at full brightness on a stormy day.
+    "wP_Rooms_v1_R00_S_day_1k": ((0.08, 0.08, 0.085), 0.0, 0.9, None),
+}
+
+
+def fix_materials():
+    mel = unreal.MaterialEditingLibrary
+    base = DEST + "/PostApocNY/Materials/"
+    n = 0
+    for name, (color, metal, rough, emissive) in MATERIAL_FIXES.items():
+        m = unreal.load_asset(base + name)
+        if not isinstance(m, unreal.MaterialInstanceConstant):
+            continue
+        mel.set_material_instance_vector_parameter_value(m, "BaseColorFactor", unreal.LinearColor(color[0], color[1], color[2], 1))
+        mel.set_material_instance_scalar_parameter_value(m, "MetallicFactor", metal)
+        mel.set_material_instance_scalar_parameter_value(m, "RoughnessFactor", rough)
+        if emissive:
+            mel.set_material_instance_vector_parameter_value(m, "EmissiveFactor", unreal.LinearColor(emissive[0], emissive[1], emissive[2], 1))
+        zs.eal.save_asset(base + name, only_if_is_dirty=False)
+        n += 1
+    zs.log("fixed %d untextured materials" % n)
 
 
 if POST_ONLY:
     postprocess()
     tune_art_level()
+    fix_materials()
+    raise SystemExit(0)
+if "--tune-only" in sys.argv:
+    tune_art_level()
+    raise SystemExit(0)
+if "--materials-only" in sys.argv:
+    fix_materials()
     raise SystemExit(0)
 
 if not os.path.exists(SRC):
@@ -120,3 +179,4 @@ zs.log("actors in art level: %d" % len(actors))
 les.save_current_level()
 zs.log("Saved " + ART_MAP)
 tune_art_level()
+fix_materials()

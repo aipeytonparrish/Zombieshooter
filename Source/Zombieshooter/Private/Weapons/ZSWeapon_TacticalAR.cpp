@@ -64,6 +64,7 @@ AZSWeapon_TacticalAR::AZSWeapon_TacticalAR()
 	A.WeaponAttachBone = TEXT("ik_hand_gun");
 	A.CameraSocket = TEXT("SOCKET_CameraFP");
 	A.CameraFromSocket = FTransform(FRotator(0.f, 90.f, -90.f));   // as in the pack's BP_TFA_BaseCharacter
+	A.ADSViewOffset = FVector(6.f, 0.f, 0.3f);    // the aim pose puts the rear aperture right on the eye: push the sights out
 
 	A.Idle = Soft<UAnimSequence>(FP + TEXT("Locomotion/A_TFA_FP_AR_Idle_Loop_Standing"));
 	A.Walk = Soft<UAnimSequence>(FP + TEXT("Locomotion/A_TFA_FP_AR_Walk_F_Loop_Standing"));

@@ -525,20 +525,42 @@ Console: `ZSGiveXP 2000000` (to level 55), `ZSPrestige` (prestige now), `ZSPrest
 
 ## New York level — Riverside Ruins (from your post-apocalyptic NY scene)
 
-Map table → **New York - Riverside Ruins** (level 1). A ruined street by the river on a grey, rainy afternoon:
-brownstones, rusted cars, debris piles, dead trees and street lamps along the riverbank, a foggy skyline of
-broken towers. Play area ~42 × 120 m along the street (invisible walls at the river and the far facades),
-14 zombie spawn points around the edges, 3 ammo crates (north end near the start, middle by the river, south).
+Map table → **New York - Riverside Ruins** (level 1). A ruined street by the river on a grey, stormy afternoon:
+brownstones, rusted cars, debris piles, dead trees and street lamps along the riverbank, Megascans NYC buildings
+along the east side and the north end. Play area ~42 × 140 m along the street (invisible walls at the river and
+the far facades), 3 ammo crates.
+
+**Round-based start, indoors then out:**
+- You start inside the **safehouse** at the north end of the street: two rooms built from your industrial
+  modular kit (pipes, vents, cracked windows, a red emergency lamp by the door).
+- Zombies climb up through the floor grates in the back room and come at you through the divider doorway.
+- The boarded **street door** costs **$350 run cash** (Interact). Buying it knocks the boards out and opens the
+  street: from then on zombies also come from the 18 spawn points along the street (zone "Street").
+- Generic pieces you can reuse in other maps: `AZSBuyDoor` (cost, zone, label, opening size, board material)
+  and `AZSSpawnPoint` **Zone** / **Min Player Distance**.
+
+**Intensity (all maps):** denser rounds from round 1 (14 alive at once, quicker spawns, sprinters from round 2,
+faster zombies later); **horde surges** from round 3 — about 9 s into a round and then every 30 s a burst of
+4 + round/3 zombies pours in with a "HORDE INCOMING" warning, a quarter more of them sprinters; zombies spawn
+closer (9–35 m). Zombies that make no progress for 8 s (stuck on debris, lost behind a wall) are moved to a fresh
+spawn point out of view.
 
 Weather (all in `L_NYC`, rebuild with `Tools/Import/create_nyc_map.py`):
 - **Clouds:** storm-coverage volumetric clouds (`MI_ZS_OvercastClouds`), weak soft sun, real-time sky light.
 - **Fog:** light height fog with volumetric fog, cool grey grade, slight negative exposure.
 - **Rain:** `AZSRain` (our C++ actor): 4,000 streaks simulated around the camera in world space. Tune it on the
-  `ZSRain` actor (count, box size, speed, streak size, opacity, colour, wind).
+  `ZSRain` actor (count, box size, speed, streak size, opacity, colour, wind). **Shelter Boxes** keep it out of
+  the safehouse.
+- **Lightning:** `AZSRain` also flashes the sun and sky light every 14–35 s, with thunder a moment later
+  (a big explosion sound pitched way down until there's a real thunder sound).
 
 Rebuilding the art (only needed on a new PC or after changing the scene) is in `Docs/ThirdPartyAssets.md`
 ("New York level"). Layout helper: console `ZSHeightMap -7000 5000 -9000 9000 250` writes a floor-height grid to
 `Saved/ZSHeightMap.txt` (used to place the play area, spawns and crates).
 
-Known: the art was a render scene, so a few backdrop towers right behind the east facades are low-poly up close,
-and the river surface is solid (the walls keep you off it).
+Known: the art was a render scene. The rubble piles are low-poly by design (the scene calls them
+"debrispilelowres"); they need a rubble pack to replace (Docs/AssetRequests.md). The river surface is solid
+(the walls keep you off it).
+
+Test helpers: `ZSRunCash 400` (run cash for this run only), `ZSUseDoors` (uses every buy door). Launches with
+`-ZSAutoShot=` never write your save any more (they used to count as force-quit runs).

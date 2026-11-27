@@ -26,6 +26,7 @@
 #include "Engine/DamageEvents.h"
 #include "Rounds/ZSRunTaskComponent.h"
 #include "Zombieshooter.h"
+#include "World/ZSBuyDoor.h"
 
 AZSPlayerController::AZSPlayerController()
 {
@@ -210,6 +211,20 @@ void AZSPlayerController::StartAutoShotIfRequested()
 		FTimerHandle KillTimer;
 		GetWorldTimerManager().SetTimer(KillTimer, FTimerDelegate::CreateWeakLambda(this, [this]() { ZSKillZombies(); }), 2.f, true, 2.f);
 	}
+	// -ZSAutoExec=ZSRunCash+400|ZSUseDoors -ZSAutoExecAt=12: console commands at a given time ('+' for spaces).
+	FString ExecStr;
+	if (FParse::Value(Cmd, TEXT("ZSAutoExec="), ExecStr, false))
+	{
+		float ExecAt = 3.f;
+		FParse::Value(Cmd, TEXT("ZSAutoExecAt="), ExecAt);
+		FTimerHandle ExecTimer;
+		GetWorldTimerManager().SetTimer(ExecTimer, FTimerDelegate::CreateWeakLambda(this, [this, ExecStr]()
+		{
+			TArray<FString> Lines;
+			ExecStr.ParseIntoArray(Lines, TEXT("|"));
+			for (const FString& L : Lines) { ConsoleCommand(L.Replace(TEXT("+"), TEXT(" ")).TrimStartAndEnd()); }   // '+' = space
+		}), FMath::Max(0.1f, ExecAt), false);
+	}
 	FString TeleportStr;
 	if (FParse::Value(Cmd, TEXT("ZSAutoTeleport="), TeleportStr, false))
 	{
@@ -219,7 +234,7 @@ void AZSPlayerController::StartAutoShotIfRequested()
 		{
 			const FVector Where(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]), FCString::Atof(*Parts[2]));
 			FTimerHandle TeleportTimer;
-			GetWorldTimerManager().SetTimer(TeleportTimer, FTimerDelegate::CreateWeakLambda(this, [this, Where]() { if (APawn* P = GetPawn()) { const bool bOk = P->TeleportTo(Where, P->GetActorRotation()); UE_LOG(LogZS, Warning, TEXT("Teleport %s -> %s"), bOk ? TEXT("ok") : TEXT("FAILED"), *P->GetActorLocation().ToCompactString()); } }), 0.7f, false);
+			GetWorldTimerManager().SetTimer(TeleportTimer, FTimerDelegate::CreateWeakLambda(this, [this, Where]() { if (APawn* P = GetPawn()) { bool bOk = false; for (const float Up : { 0.f, 100.f, 250.f, 500.f }) { if ((bOk = P->TeleportTo(Where + FVector(0.f, 0.f, Up), P->GetActorRotation()))) { break; } } UE_LOG(LogZS, Warning, TEXT("Teleport %s -> %s"), bOk ? TEXT("ok") : TEXT("FAILED"), *P->GetActorLocation().ToCompactString()); } }), 0.7f, false);
 		}
 	}
 	// -ZSAutoProbe="x,y,z;x,y,z": teleport to each point and log ZSProbe.
@@ -704,6 +719,29 @@ void AZSPlayerController::ZSResetProfile()
 void AZSPlayerController::ZSGiveCash(int32 Amount)
 {
 	if (UZSProfileSubsystem* P = UZSProfileSubsystem::Get(this)) { P->GiveCash(Amount); ZSProfile(); }
+}
+
+void AZSPlayerController::ZSRunCash(int32 Amount)
+{
+	if (AZSGameState_Survival* GS = GetWorld()->GetGameState<AZSGameState_Survival>())
+	{
+		GS->RunCash += Amount;
+		UE_LOG(LogZS, Warning, TEXT("Run cash: %d"), GS->RunCash);
+	}
+}
+
+void AZSPlayerController::ZSUseDoors()
+{
+	AZSPlayerCharacter* Char = Cast<AZSPlayerCharacter>(GetPawn());
+	for (TActorIterator<AZSBuyDoor> It(GetWorld()); It; ++It)
+	{
+		if (!It->IsOpen())
+		{
+			UE_LOG(LogZS, Warning, TEXT("Door %s: %s"), *It->GetName(), *It->GetInteractPrompt().ToString());
+			It->Interact(Char);
+			UE_LOG(LogZS, Warning, TEXT("Door %s open: %d"), *It->GetName(), It->IsOpen() ? 1 : 0);
+		}
+	}
 }
 
 void AZSPlayerController::ZSHeightMap(int32 X0, int32 X1, int32 Y0, int32 Y1, int32 Step)

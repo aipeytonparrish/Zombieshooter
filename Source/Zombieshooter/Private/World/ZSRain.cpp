@@ -5,6 +5,12 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Components/DirectionalLightComponent.h"
+#include "Components/SkyLightComponent.h"
+#include "Engine/DirectionalLight.h"
+#include "Engine/SkyLight.h"
+#include "EngineUtils.h"
+#include "Sound/SoundBase.h"
 
 AZSRain::AZSRain()
 {
@@ -59,6 +65,76 @@ void AZSRain::BeginPlay()
 	}
 	Drops->AddInstances(Xforms, false, true, false);
 	Drops->SetBoundsScale(2.f);
+
+	if (bLightning)
+	{
+		for (TActorIterator<ADirectionalLight> It(GetWorld()); It && !Sun; ++It)
+		{
+			Sun = Cast<UDirectionalLightComponent>(It->GetLightComponent());
+		}
+		for (TActorIterator<ASkyLight> It(GetWorld()); It && !Sky; ++It)
+		{
+			Sky = It->GetLightComponent();
+		}
+		SunBase = Sun ? Sun->Intensity : 0.f;
+		SkyBase = Sky ? Sky->Intensity : 0.f;
+		NextFlash = FMath::FRandRange(6.f, LightningInterval.X);
+		if (!ThunderSound)
+		{
+			ThunderSound = LoadObject<USoundBase>(nullptr, TEXT("/Game/GunSoundsPackVol1/Bonus/cue/Explosion_Large_3-1_Cue.Explosion_Large_3-1_Cue"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+		}
+	}
+}
+
+bool AZSRain::IsSheltered(const FVector& P) const
+{
+	for (const FBox& B : ShelterBoxes)
+	{
+		if (B.IsInside(P))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void AZSRain::UpdateLightning(float DeltaSeconds)
+{
+	if (!bLightning || (!Sun && !Sky))
+	{
+		return;
+	}
+	if (ThunderDelay >= 0.f)
+	{
+		ThunderDelay -= DeltaSeconds;
+		if (ThunderDelay < 0.f && ThunderSound)
+		{
+			// Distant thunder: a big explosion pitched way down.
+			UGameplayStatics::PlaySound2D(this, ThunderSound, FMath::FRandRange(0.35f, 0.6f), FMath::FRandRange(0.35f, 0.5f));
+		}
+	}
+	if (FlashTime < 0.f)
+	{
+		NextFlash -= DeltaSeconds;
+		if (NextFlash <= 0.f)
+		{
+			FlashTime = 0.f;
+			NextFlash = FMath::FRandRange(LightningInterval.X, LightningInterval.Y);
+			ThunderDelay = FMath::FRandRange(0.4f, 2.2f);
+		}
+		return;
+	}
+	// Double flicker over ~0.45 s.
+	FlashTime += DeltaSeconds;
+	const float T = FlashTime;
+	float A = 0.f;
+	if (T < 0.07f) { A = 1.f; }
+	else if (T < 0.14f) { A = 0.15f; }
+	else if (T < 0.24f) { A = 0.8f; }
+	else if (T < 0.45f) { A = 0.8f * (1.f - (T - 0.24f) / 0.21f); }
+	else { FlashTime = -1.f; }
+	if (Sun) { Sun->SetIntensity(SunBase * (1.f + LightningBoost * A)); }
+	if (Sky) { Sky->SetIntensity(SkyBase * (1.f + LightningBoost * 0.5f * A)); }
 }
 
 FTransform AZSRain::DropTransform(int32 i) const
@@ -76,6 +152,7 @@ void AZSRain::Tick(float DeltaSeconds)
 	{
 		return;
 	}
+	UpdateLightning(DeltaSeconds);
 	const FVector C = Cam->GetCameraLocation();
 	SetActorLocation(C);   // keeps the component bounds around the camera
 
@@ -91,6 +168,10 @@ void AZSRain::Tick(float DeltaSeconds)
 		P.Y = Wrap(P.Y, C.Y, BoxExtent.Y);
 		P.Z = Wrap(P.Z, C.Z, BoxExtent.Z);
 		Xforms[i] = DropTransform(i);
+		if (ShelterBoxes.Num() > 0 && IsSheltered(P))
+		{
+			Xforms[i].SetScale3D(FVector::ZeroVector);
+		}
 	}
 	Drops->BatchUpdateInstancesTransforms(0, Xforms, true, true, true);
 }

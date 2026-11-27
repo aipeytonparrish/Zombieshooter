@@ -253,6 +253,9 @@ private:
 	float RepathTimer = 0.f;
 	bool bDirectChase = false;
 	float StuckTime = 0.f;
+	/** Straggler check: distance to the player at the start of the current window. */
+	float ProgressTimer = 0.f;
+	float ProgressStartDist = 1.e9f;
 	float SidestepTime = 0.f;
 	FVector SidestepDir = FVector::ZeroVector;
 	int32 AttackIndex = 0;

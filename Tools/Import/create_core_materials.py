@@ -88,3 +88,25 @@ def import_round_curves():
 
 
 import_round_curves()
+
+
+def import_level_curves():
+    """Data/ZSLevels.csv -> /Game/ZS/Data/CT_ZSLevels (XP needed for each level, 1..55)."""
+    task = unreal.AssetImportTask()
+    task.filename = os.path.join(zs.PROJECT_DIR, "Data", "ZSLevels.csv")
+    task.destination_path = "/Game/ZS/Data"
+    task.destination_name = "CT_ZSLevels"
+    task.automated = True
+    task.replace_existing = True
+    task.save = True
+    factory = unreal.CSVImportFactory()
+    settings = unreal.CSVImportSettings()
+    settings.set_editor_property("import_type", unreal.CSVImportType.ECSV_CURVE_TABLE)
+    settings.set_editor_property("import_curve_interp_mode", unreal.RichCurveInterpMode.RCIM_LINEAR)
+    factory.set_editor_property("automated_import_settings", settings)
+    task.factory = factory
+    zs.asset_tools.import_asset_tasks([task])
+    zs.log("Imported level curves: " + str(list(task.imported_object_paths)))
+
+
+import_level_curves()

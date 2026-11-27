@@ -22,6 +22,13 @@ public:
 	UZSInputSet* GetInputSet();
 
 	bool IsMovementDebugVisible() const { return bShowMovementDebug; }
+
+	// ---- Pause menu (drawn by AZSHUD) ----
+	bool IsPauseMenuOpen() const { return bPauseMenuOpen; }
+	int32 GetPauseMenuIndex() const { return PauseMenuIndex; }
+	bool IsConfirmingAbandon() const { return bConfirmAbandon; }
+	TArray<FText> GetPauseMenuItems() const;
+	void SetPauseMenuOpen(bool bOpen);
 	void ToggleMovementDebug() { bShowMovementDebug = !bShowMovementDebug; }
 
 	// ---- Console commands (type in the ~ console) ----
@@ -94,6 +101,25 @@ public:
 	UFUNCTION(Exec)
 	void ZSZombieInfo();
 
+	/** ZSProfile -> logs level, XP, cash, weapons and lifetime stats. */
+	UFUNCTION(Exec)
+	void ZSProfile();
+
+	/** ZSResetProfile -> wipes the save (level 1, no cash, starter weapons). */
+	UFUNCTION(Exec)
+	void ZSResetProfile();
+
+	/** ZSGiveCash 5000 / ZSGiveXP 10000 */
+	UFUNCTION(Exec)
+	void ZSGiveCash(int32 Amount);
+
+	UFUNCTION(Exec)
+	void ZSGiveXP(int32 Amount);
+
+	/** ZSWinRun -> survival: end the run as a win now (testing). */
+	UFUNCTION(Exec)
+	void ZSWinRun();
+
 	/** ZSGod -> toggles player invulnerability (testing). */
 	UFUNCTION(Exec)
 	void ZSGod();
@@ -112,4 +138,15 @@ private:
 
 	/** Dev-only automated screenshot run, driven by -ZSAutoShot=<seconds> on the command line (see .cpp). */
 	void StartAutoShotIfRequested();
+
+	void Input_Pause(const struct FInputActionValue& Value);
+	void Input_MenuConfirm(const FInputActionValue& Value);
+	void Input_MenuBack(const FInputActionValue& Value);
+	void Input_MenuUp(const FInputActionValue& Value);
+	void Input_MenuDown(const FInputActionValue& Value);
+	void ActivatePauseItem(int32 Index);
+
+	bool bPauseMenuOpen = false;
+	int32 PauseMenuIndex = 0;
+	bool bConfirmAbandon = false;
 };

@@ -7,6 +7,7 @@
 #include "Player/ZSPlayerCharacter.h"
 #include "Misc/CommandLine.h"
 #include "TimerManager.h"
+#include "Containers/Ticker.h"
 #include "HAL/IConsoleManager.h"
 #include "Engine/World.h"
 #include "Zombies/ZSZombieBase.h"
@@ -15,6 +16,10 @@
 #include "GameFramework/DamageType.h"
 #include "Rounds/ZSGameMode_Survival.h"
 #include "Rounds/ZSRoundManagerComponent.h"
+#include "Profile/ZSProfileSubsystem.h"
+#include "Rounds/ZSGameState_Survival.h"
+#include "EnhancedInputComponent.h"
+#include "InputActionValue.h"
 #include "Zombieshooter.h"
 
 AZSPlayerController::AZSPlayerController()
@@ -43,6 +48,15 @@ void AZSPlayerController::SetupInputComponent()
 	if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
 	{
 		Subsystem->AddMappingContext(GetInputSet()->GameplayContext, 0);
+	}
+	if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(InputComponent))
+	{
+		const UZSInputSet* Set = GetInputSet();
+		EIC->BindAction(Set->Pause, ETriggerEvent::Started, this, &ThisClass::Input_Pause);
+		EIC->BindAction(Set->MenuConfirm, ETriggerEvent::Started, this, &ThisClass::Input_MenuConfirm);
+		EIC->BindAction(Set->MenuBack, ETriggerEvent::Started, this, &ThisClass::Input_MenuBack);
+		EIC->BindAction(Set->MenuUp, ETriggerEvent::Started, this, &ThisClass::Input_MenuUp);
+		EIC->BindAction(Set->MenuDown, ETriggerEvent::Started, this, &ThisClass::Input_MenuDown);
 	}
 	else
 	{
@@ -203,6 +217,20 @@ void AZSPlayerController::StartAutoShotIfRequested()
 			GetWorldTimerManager().SetTimer(TeleportTimer, FTimerDelegate::CreateWeakLambda(this, [this, Where]() { if (APawn* P = GetPawn()) { const bool bOk = P->TeleportTo(Where, P->GetActorRotation()); UE_LOG(LogZS, Warning, TEXT("Teleport %s -> %s"), bOk ? TEXT("ok") : TEXT("FAILED"), *P->GetActorLocation().ToCompactString()); } }), 0.7f, false);
 		}
 	}
+	if (FParse::Param(Cmd, TEXT("ZSAutoWin")) || FParse::Param(Cmd, TEXT("ZSAutoAbandon")) || FParse::Param(Cmd, TEXT("ZSAutoPause")))
+	{
+		const bool bWin = FParse::Param(Cmd, TEXT("ZSAutoWin"));
+		const bool bAbandon = FParse::Param(Cmd, TEXT("ZSAutoAbandon"));
+		FTimerHandle EndTimer;
+		GetWorldTimerManager().SetTimer(EndTimer, FTimerDelegate::CreateWeakLambda(this, [this, bWin, bAbandon]()
+		{
+			ZSProfile();
+			if (bWin) { ZSWinRun(); }
+			else if (bAbandon) { if (AZSGameMode_Survival* GM = GetWorld()->GetAuthGameMode<AZSGameMode_Survival>()) { GM->AbandonRun(); } }
+			else { SetPauseMenuOpen(true); PauseMenuIndex = 1; }
+			ZSProfile();
+		}), 2.f, false);
+	}
 	int32 AutoRound = 0;
 	FParse::Value(Cmd, TEXT("ZSAutoRound="), AutoRound);
 	if (AutoRound > 0)
@@ -257,18 +285,18 @@ void AZSPlayerController::StartAutoShotIfRequested()
 		}), 0.48f, true, 1.f);
 	}
 
-	FTimerHandle Shot;
-	GetWorldTimerManager().SetTimer(Shot, FTimerDelegate::CreateWeakLambda(this, [this]()
+	// Core ticker (not world timers) so the shot and quit still happen while the game is paused.
+	TWeakObjectPtr<AZSPlayerController> WeakThis(this);
+	FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([WeakThis](float)
 	{
-		ZSZombieInfo();
-		ConsoleCommand(TEXT("HighResShot 1"));
-	}), FMath::Max(Delay, 1.f), false);
-
-	FTimerHandle Quit;
-	GetWorldTimerManager().SetTimer(Quit, FTimerDelegate::CreateWeakLambda(this, [this]()
+		if (AZSPlayerController* PC = WeakThis.Get()) { PC->ZSZombieInfo(); PC->ConsoleCommand(TEXT("HighResShot 1")); }
+		return false;
+	}), FMath::Max(Delay, 1.f));
+	FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([WeakThis](float)
 	{
-		ConsoleCommand(TEXT("quit"));
-	}), FMath::Max(Delay, 1.f) + 1.5f, false);
+		if (AZSPlayerController* PC = WeakThis.Get()) { PC->ConsoleCommand(TEXT("quit")); }
+		return false;
+	}), FMath::Max(Delay, 1.f) + 1.5f);
 #endif
 }
 
@@ -313,7 +341,7 @@ void AZSPlayerController::ZSKillZombies()
 	{
 		if (!It->IsDead())
 		{
-			UGameplayStatics::ApplyDamage(*It, 1.0e6f, nullptr, nullptr, UDamageType::StaticClass());
+			UGameplayStatics::ApplyDamage(*It, 1.0e6f, this, GetPawn(), UDamageType::StaticClass());   // credited to the player (testing rewards)
 		}
 	}
 }
@@ -352,4 +380,157 @@ void AZSPlayerController::ZSZombieInfo()
 		++N;
 	}
 	UE_LOG(LogZS, Warning, TEXT("%d zombies"), N);
+}
+
+// ---- Pause menu / results input --------------------------------------------------------------
+
+TArray<FText> AZSPlayerController::GetPauseMenuItems() const
+{
+	TArray<FText> Items;
+	Items.Add(NSLOCTEXT("ZS", "Pause_Resume", "RESUME"));
+	if (GetWorld()->GetAuthGameMode<AZSGameMode_Survival>())
+	{
+		Items.Add(bConfirmAbandon ? NSLOCTEXT("ZS", "Pause_AbandonConfirm", "CONFIRM ABANDON (deployed gear is lost)") : NSLOCTEXT("ZS", "Pause_Abandon", "ABANDON RUN"));
+	}
+	Items.Add(NSLOCTEXT("ZS", "Pause_Quit", "QUIT GAME"));
+	return Items;
+}
+
+void AZSPlayerController::SetPauseMenuOpen(bool bOpen)
+{
+	bPauseMenuOpen = bOpen;
+	PauseMenuIndex = 0;
+	bConfirmAbandon = false;
+	SetPause(bOpen);
+}
+
+void AZSPlayerController::Input_Pause(const FInputActionValue& Value)
+{
+	const AZSGameState_Survival* GS = GetWorld()->GetGameState<AZSGameState_Survival>();
+	if (GS && GS->bShowResults)
+	{
+		return;
+	}
+	SetPauseMenuOpen(!bPauseMenuOpen);
+}
+
+void AZSPlayerController::Input_MenuConfirm(const FInputActionValue& Value)
+{
+	// Results screen: continue.
+	if (const AZSGameState_Survival* GS = GetWorld()->GetGameState<AZSGameState_Survival>(); GS && GS->bShowResults)
+	{
+		if (AZSGameMode_Survival* GM = GetWorld()->GetAuthGameMode<AZSGameMode_Survival>())
+		{
+			GM->RestartRun();
+		}
+		return;
+	}
+	if (bPauseMenuOpen)
+	{
+		ActivatePauseItem(PauseMenuIndex);
+	}
+}
+
+void AZSPlayerController::Input_MenuBack(const FInputActionValue& Value)
+{
+	if (bPauseMenuOpen)
+	{
+		if (bConfirmAbandon)
+		{
+			bConfirmAbandon = false;
+		}
+		else
+		{
+			SetPauseMenuOpen(false);
+		}
+	}
+}
+
+void AZSPlayerController::Input_MenuUp(const FInputActionValue& Value)
+{
+	if (bPauseMenuOpen)
+	{
+		const int32 Num = GetPauseMenuItems().Num();
+		PauseMenuIndex = (PauseMenuIndex + Num - 1) % Num;
+		bConfirmAbandon = false;
+	}
+}
+
+void AZSPlayerController::Input_MenuDown(const FInputActionValue& Value)
+{
+	if (bPauseMenuOpen)
+	{
+		const int32 Num = GetPauseMenuItems().Num();
+		PauseMenuIndex = (PauseMenuIndex + 1) % Num;
+		bConfirmAbandon = false;
+	}
+}
+
+void AZSPlayerController::ActivatePauseItem(int32 Index)
+{
+	AZSGameMode_Survival* GM = GetWorld()->GetAuthGameMode<AZSGameMode_Survival>();
+	const bool bSurvival = GM != nullptr;
+	if (Index == 0)
+	{
+		SetPauseMenuOpen(false);
+		return;
+	}
+	if (bSurvival && Index == 1)
+	{
+		// Abandoning is a fail: ask twice.
+		if (!bConfirmAbandon)
+		{
+			bConfirmAbandon = true;
+			return;
+		}
+		SetPauseMenuOpen(false);
+		GM->AbandonRun();
+		return;
+	}
+	// Quit: quitting mid-run counts as a fail (same as the force-quit rule), so settle it first.
+	if (bSurvival && !GM->IsRunOver())
+	{
+		GM->AbandonRun();
+	}
+	ConsoleCommand(TEXT("quit"));
+}
+
+// ---- Profile debug --------------------------------------------------------------------------
+
+void AZSPlayerController::ZSProfile()
+{
+	if (const UZSProfileSubsystem* P = UZSProfileSubsystem::Get(this))
+	{
+		FString Weapons;
+		for (const FZSInventoryWeapon& W : P->GetWeapons())
+		{
+			Weapons += W.ItemId.ToString() + TEXT(" ");
+		}
+		const FZSLifetimeStats& S = P->GetStats();
+		UE_LOG(LogZS, Warning, TEXT("Profile: level %d (%d / %d XP), $%lld, weapons [%s], runs %d wins %d kills %d best round %d, run active %d"),
+			P->GetLevel(), P->GetLevelXP(), P->GetXPToNextLevel(), P->GetCash(), *Weapons, S.Runs, S.Wins, S.Kills, S.HighestRound, P->IsRunActive());
+	}
+}
+
+void AZSPlayerController::ZSResetProfile()
+{
+	if (UZSProfileSubsystem* P = UZSProfileSubsystem::Get(this)) { P->ResetProfile(); ZSProfile(); }
+}
+
+void AZSPlayerController::ZSGiveCash(int32 Amount)
+{
+	if (UZSProfileSubsystem* P = UZSProfileSubsystem::Get(this)) { P->GiveCash(Amount); ZSProfile(); }
+}
+
+void AZSPlayerController::ZSGiveXP(int32 Amount)
+{
+	if (UZSProfileSubsystem* P = UZSProfileSubsystem::Get(this)) { P->GiveXP(Amount); ZSProfile(); }
+}
+
+void AZSPlayerController::ZSWinRun()
+{
+	if (AZSGameMode_Survival* GM = GetWorld()->GetAuthGameMode<AZSGameMode_Survival>())
+	{
+		GM->EndRun(EZSRunOutcome::Won);
+	}
 }

@@ -76,6 +76,14 @@ void UZSInputSet::Build()
 
 	Pause               = MakeAction(TEXT("IA_Pause"), EInputActionValueType::Boolean);
 	ToggleMovementDebug = MakeAction(TEXT("IA_ToggleMovementDebug"), EInputActionValueType::Boolean);
+	MenuConfirm         = MakeAction(TEXT("IA_MenuConfirm"), EInputActionValueType::Boolean);
+	MenuBack            = MakeAction(TEXT("IA_MenuBack"), EInputActionValueType::Boolean);
+	MenuUp              = MakeAction(TEXT("IA_MenuUp"), EInputActionValueType::Boolean);
+	MenuDown            = MakeAction(TEXT("IA_MenuDown"), EInputActionValueType::Boolean);
+	for (UInputAction* A : { Pause.Get(), MenuConfirm.Get(), MenuBack.Get(), MenuUp.Get(), MenuDown.Get() })
+	{
+		A->bTriggerWhenPaused = true;
+	}
 
 	// ---- Gamepad (primary) ------------------------------------------------------------------
 	// Sticks are mapped raw; dead zones and response curves are applied in C++ from user settings.
@@ -96,6 +104,12 @@ void UZSInputSet::Build()
 	MapKey(FireMode,            EKeys::Gamepad_DPad_Up);
 	MapKey(Pause,               EKeys::Gamepad_Special_Right);
 	MapKey(ToggleMovementDebug, EKeys::Gamepad_DPad_Down);
+	MapKey(MenuConfirm,         EKeys::Gamepad_FaceButton_Bottom);
+	MapKey(MenuBack,            EKeys::Gamepad_FaceButton_Right);
+	MapKey(MenuUp,              EKeys::Gamepad_DPad_Up);
+	MapKey(MenuDown,            EKeys::Gamepad_DPad_Down);
+	MapKey(MenuUp,              EKeys::Gamepad_LeftStick_Up);
+	MapKey(MenuDown,            EKeys::Gamepad_LeftStick_Down);
 
 	// ---- Keyboard + mouse -------------------------------------------------------------------
 	MapWASD(Move);
@@ -119,4 +133,9 @@ void UZSInputSet::Build()
 	MapKey(FireMode,            EKeys::B);
 	MapKey(Pause,               EKeys::Escape);
 	MapKey(ToggleMovementDebug, EKeys::F3);
+	MapKey(MenuConfirm,         EKeys::Enter);
+	MapKey(MenuConfirm,         EKeys::SpaceBar);
+	MapKey(MenuBack,            EKeys::BackSpace);
+	MapKey(MenuUp,              EKeys::Up);
+	MapKey(MenuDown,            EKeys::Down);
 }

@@ -3,6 +3,7 @@
 #include "Weapons/ZSWeapon_RD704.h"
 #include "Weapons/ZSWeapon_TacticalAR.h"
 #include "Weapons/ZSFPAnimInstance.h"
+#include "Rounds/ZSGameMode_Survival.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "Animation/AnimSequence.h"
@@ -114,7 +115,18 @@ void UZSWeaponComponent::SpawnDefaultWeapons()
 		return;
 	}
 
-	for (const TSubclassOf<AZSWeaponBase>& Class : DefaultWeapons)
+	// Survival: the profile's deployed loadout. Sandbox: the default test weapons.
+	TArray<TSubclassOf<AZSWeaponBase>> ToSpawn = DefaultWeapons;
+	if (AZSGameMode_Survival* GM = World->GetAuthGameMode<AZSGameMode_Survival>())
+	{
+		const TArray<TSubclassOf<AZSWeaponBase>> Deployed = GM->GetDeployedWeaponClasses();
+		if (Deployed.Num() > 0)
+		{
+			ToSpawn = Deployed;
+		}
+	}
+
+	for (const TSubclassOf<AZSWeaponBase>& Class : ToSpawn)
 	{
 		if (!Class)
 		{

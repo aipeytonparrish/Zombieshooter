@@ -8,6 +8,7 @@
 #include "Interaction/ZSInteractionComponent.h"
 #include "CommonInputSubsystem.h"
 #include "Engine/LocalPlayer.h"
+#include "Player/ZSPlayerController.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
@@ -54,8 +55,12 @@ void AZSHUD::DrawHUD()
 	{
 		DrawSurvival(GS, Char, Scale);
 	}
+	else
+	{
+		DrawPauseMenu(Scale);
+	}
 	UZSWeaponComponent* Weapons = Char ? Char->GetWeaponComponent() : nullptr;
-	if (!Weapons || !Weapons->GetCurrentWeapon() || (Char->GetHealthComponent() && Char->GetHealthComponent()->IsDead()))
+	if (!Weapons || !Weapons->GetCurrentWeapon() || (Char->GetHealthComponent() && Char->GetHealthComponent()->IsDead()) || (GS && GS->bShowResults))
 	{
 		return;
 	}
@@ -398,17 +403,163 @@ void AZSHUD::DrawSurvival(const AZSGameState_Survival* GS, const AZSPlayerCharac
 		break;
 
 	case EZSRoundPhase::GameOver:
-	{
-		DrawRect(FLinearColor(0.08f, 0.f, 0.f, 0.6f), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
-		const int32 Minutes = FMath::FloorToInt(GS->RunTime / 60.f);
-		const int32 Seconds = FMath::FloorToInt(GS->RunTime) % 60;
-		const float Y0 = Canvas->ClipY * 0.3f;
-		DrawCentered(TEXT("GAME OVER"), Y0, Big, 4.f * Scale, KillRed);
-		DrawCentered(FString::Printf(TEXT("You reached round %d"), GS->Round), Y0 + 110.f * Scale, Small, 1.8f * Scale, HudWhite);
-		DrawCentered(FString::Printf(TEXT("Kills %d    Headshots %d    Time %d:%02d"), GS->Kills, GS->Headshots, Minutes, Seconds),
-			Y0 + 160.f * Scale, Small, 1.4f * Scale, FLinearColor(0.85f, 0.85f, 0.85f, 1.f));
-		DrawCentered(FString::Printf(TEXT("Restarting in %d"), FMath::CeilToInt(GS->RestartIn)), Y0 + 220.f * Scale, Small, 1.2f * Scale, HeadGold);
+		DrawResults(GS, Scale);
 		break;
 	}
+
+	if (GS->Phase != EZSRoundPhase::GameOver)
+	{
+		DrawRunEconomy(GS, Scale);
 	}
+	DrawPauseMenu(Scale);
+}
+
+void AZSHUD::DrawRunEconomy(const AZSGameState_Survival* GS, float Scale)
+{
+	UFont* Small = GEngine->GetMediumFont();
+	const float Now = GetWorld()->GetTimeSeconds();
+	const float Right = Canvas->ClipX - 70.f * Scale;
+
+	// Run earnings, top right - lost on a fail until the run is won.
+	auto RightText = [&](const FString& Text, float Y, float TextScale, const FLinearColor& Color)
+	{
+		float TW, TH;
+		GetTextSize(Text, TW, TH, Small, TextScale);
+		DrawText(Text, HudShadow, Right - TW + 2.f, Y + 2.f, Small, TextScale);
+		DrawText(Text, Color, Right - TW, Y, Small, TextScale);
+	};
+	RightText(FString::Printf(TEXT("$%d"), GS->RunCash), 50.f * Scale, 2.f * Scale, FLinearColor(0.55f, 0.95f, 0.45f, 0.95f));
+	RightText(FString::Printf(TEXT("%d XP"), GS->RunXP), 92.f * Scale, 1.4f * Scale, HudWhite);
+	RightText(TEXT("AT RISK"), 122.f * Scale, 1.f * Scale, FLinearColor(0.9f, 0.4f, 0.3f, 0.8f));
+
+	// Reward popups, right of the crosshair, drifting up.
+	float Y = Canvas->ClipY * 0.5f - 20.f * Scale;
+	for (int32 i = GS->Popups.Num() - 1; i >= 0; --i)
+	{
+		const FZSRewardPopup& P = GS->Popups[i];
+		const float Age = Now - P.Time;
+		const float Life = P.bBig ? 3.f : 1.4f;
+		if (Age > Life)
+		{
+			continue;
+		}
+		FLinearColor C = P.bBig ? HeadGold : FLinearColor(0.85f, 0.95f, 0.8f, 1.f);
+		C.A = FMath::Clamp((Life - Age) / 0.4f, 0.f, 1.f);
+		const float S = (P.bBig ? 1.5f : 1.1f) * Scale;
+		const float X = Canvas->ClipX * 0.5f + 60.f * Scale;
+		const float PY = Y - Age * 18.f * Scale;
+		DrawText(P.Text.ToString(), HudShadow * FLinearColor(1, 1, 1, C.A), X + 2.f, PY + 2.f, Small, S);
+		DrawText(P.Text.ToString(), C, X, PY, Small, S);
+		Y -= 26.f * Scale;
+	}
+
+	// Deploy: what a fail would cost, plus any one-off notice.
+	if (GS->Phase == EZSRoundPhase::PreGame)
+	{
+		FString Risk;
+		for (const FText& T : GS->AtRisk)
+		{
+			Risk += (Risk.IsEmpty() ? TEXT("") : TEXT(",  ")) + T.ToString();
+		}
+		if (!Risk.IsEmpty())
+		{
+			DrawCentered(FString::Printf(TEXT("AT RISK:  %s"), *Risk), Canvas->ClipY * 0.26f + 120.f * Scale, Small, 1.3f * Scale, FLinearColor(0.95f, 0.45f, 0.35f, 1.f));
+			DrawCentered(TEXT("Die or abandon and you lose this gear and everything you earn this run."), Canvas->ClipY * 0.26f + 152.f * Scale, Small, 1.05f * Scale, FLinearColor(0.8f, 0.8f, 0.8f, 0.9f));
+		}
+		if (!GS->Notice.IsEmpty())
+		{
+			DrawCentered(GS->Notice.ToString(), Canvas->ClipY * 0.26f + 190.f * Scale, Small, 1.1f * Scale, HeadGold);
+		}
+	}
+}
+
+void AZSHUD::DrawResults(const AZSGameState_Survival* GS, float Scale)
+{
+	UFont* Big = GEngine->GetLargeFont();
+	UFont* Small = GEngine->GetMediumFont();
+	const FZSRunResult& R = GS->Result;
+	const bool bWon = R.Outcome == EZSRunOutcome::Won;
+
+	DrawRect(bWon ? FLinearColor(0.f, 0.05f, 0.02f, 0.78f) : FLinearColor(0.07f, 0.f, 0.f, 0.8f), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
+
+	const FString Title = bWon ? TEXT("RUN COMPLETE") : (R.Outcome == EZSRunOutcome::Abandoned ? TEXT("RUN ABANDONED") : TEXT("RUN FAILED"));
+	float Y = Canvas->ClipY * 0.14f;
+	DrawCentered(Title, Y, Big, 4.f * Scale, bWon ? FLinearColor(0.45f, 1.f, 0.5f, 1.f) : KillRed);
+	Y += 110.f * Scale;
+
+	const int32 Minutes = FMath::FloorToInt(R.RunTime / 60.f);
+	const int32 Seconds = FMath::FloorToInt(R.RunTime) % 60;
+	DrawCentered(FString::Printf(TEXT("Round %d      Kills %d      Headshots %d      Time %d:%02d"), R.RoundReached, R.Kills, R.Headshots, Minutes, Seconds),
+		Y, Small, 1.5f * Scale, HudWhite);
+	Y += 60.f * Scale;
+
+	// Earnings: kept (green) or lost (red, "LOST").
+	const FLinearColor Kept(0.5f, 1.f, 0.5f, 1.f);
+	const FLinearColor Lost(1.f, 0.35f, 0.3f, 1.f);
+	if (bWon)
+	{
+		DrawCentered(FString::Printf(TEXT("XP  %d  + %d win bonus  =  %d"), R.XPEarned, R.XPBonus, R.XPKept), Y, Small, 1.5f * Scale, Kept);
+		Y += 36.f * Scale;
+		DrawCentered(FString::Printf(TEXT("CASH  $%d  + $%d win bonus  =  $%d"), R.CashEarned, R.CashBonus, R.CashKept), Y, Small, 1.5f * Scale, Kept);
+		Y += 36.f * Scale;
+		DrawCentered(TEXT("Loadout kept"), Y, Small, 1.2f * Scale, Kept);
+	}
+	else
+	{
+		DrawCentered(FString::Printf(TEXT("XP  %d   LOST"), R.XPEarned), Y, Small, 1.5f * Scale, Lost);
+		Y += 36.f * Scale;
+		DrawCentered(FString::Printf(TEXT("CASH  $%d   LOST"), R.CashEarned), Y, Small, 1.5f * Scale, Lost);
+		Y += 36.f * Scale;
+		FString Items;
+		for (const FText& T : R.LostItems)
+		{
+			Items += (Items.IsEmpty() ? TEXT("") : TEXT(",  ")) + T.ToString();
+		}
+		DrawCentered(Items.IsEmpty() ? FString(TEXT("No gear lost")) : FString::Printf(TEXT("GEAR LOST:  %s"), *Items), Y, Small, 1.2f * Scale, Lost);
+	}
+	Y += 60.f * Scale;
+
+	// Level bar.
+	const float BarW = 600.f * Scale, BarH = 14.f * Scale;
+	const float BX = Canvas->ClipX * 0.5f - BarW * 0.5f;
+	const float Frac = FMath::Clamp(static_cast<float>(R.LevelXP) / FMath::Max(R.LevelXPNeeded, 1), 0.f, 1.f);
+	DrawCentered(FString::Printf(TEXT("LEVEL %d"), R.LevelAfter), Y, Small, 1.6f * Scale, HudWhite);
+	Y += 40.f * Scale;
+	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.6f), BX - 2.f, Y - 2.f, BarW + 4.f, BarH + 4.f);
+	DrawRect(FLinearColor(0.95f, 0.8f, 0.25f, 0.95f), BX, Y, BarW * Frac, BarH);
+	Y += BarH + 10.f * Scale;
+	DrawCentered(FString::Printf(TEXT("%d / %d XP"), R.LevelXP, R.LevelXPNeeded), Y, Small, 1.1f * Scale, FLinearColor(0.8f, 0.8f, 0.8f, 1.f));
+	Y += 34.f * Scale;
+	if (R.LevelAfter > R.LevelBefore)
+	{
+		DrawCentered(FString::Printf(TEXT("LEVEL UP!  %d  ->  %d"), R.LevelBefore, R.LevelAfter), Y, Big, 1.6f * Scale, HeadGold);
+		Y += 50.f * Scale;
+	}
+	DrawCentered(FString::Printf(TEXT("Cash in your profile: $%lld"), GS->ProfileCash), Y, Small, 1.2f * Scale, HudWhite);
+
+	DrawCentered(FString::Printf(TEXT("Press A / Enter to continue   (%d)"), FMath::CeilToInt(GS->RestartIn)), Canvas->ClipY * 0.88f, Small, 1.3f * Scale, HeadGold);
+}
+
+void AZSHUD::DrawPauseMenu(float Scale)
+{
+	const AZSPlayerController* PC = Cast<AZSPlayerController>(GetOwningPlayerController());
+	if (!PC || !PC->IsPauseMenuOpen())
+	{
+		return;
+	}
+	UFont* Big = GEngine->GetLargeFont();
+	UFont* Small = GEngine->GetMediumFont();
+	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.65f), 0.f, 0.f, Canvas->ClipX, Canvas->ClipY);
+	float Y = Canvas->ClipY * 0.3f;
+	DrawCentered(TEXT("PAUSED"), Y, Big, 3.f * Scale, HudWhite);
+	Y += 110.f * Scale;
+	const TArray<FText> Items = PC->GetPauseMenuItems();
+	for (int32 i = 0; i < Items.Num(); ++i)
+	{
+		const bool bSel = i == PC->GetPauseMenuIndex();
+		const FString Text = bSel ? FString::Printf(TEXT(">  %s  <"), *Items[i].ToString()) : Items[i].ToString();
+		DrawCentered(Text, Y, Small, (bSel ? 1.7f : 1.4f) * Scale, bSel ? HeadGold : FLinearColor(0.8f, 0.8f, 0.8f, 1.f));
+		Y += 50.f * Scale;
+	}
+	DrawCentered(TEXT("D-pad / arrows to choose     A / Enter to select     B / Backspace to go back"), Canvas->ClipY * 0.85f, Small, 1.05f * Scale, FLinearColor(0.7f, 0.7f, 0.7f, 1.f));
 }

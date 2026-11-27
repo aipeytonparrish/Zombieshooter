@@ -298,3 +298,50 @@ Lifetime 0 for a permanent one), plus a **Nav Mesh Bounds Volume** covering the 
 - Round start / end stingers use explosion sounds from GunSoundsPackVol1 until proper music stingers exist.
 - Pickup visuals are simple glowing shapes; lethal / tactical refills arrive with grenades, power-ups in Milestone 11.
 - The round-20 boss is Milestone 12 — rounds currently continue past 20.
+
+---
+
+## Milestone 6 — Profile, economy, risk
+
+### What's saved
+`Saved/SaveGames/Profile0.sav` (UZSProfileSubsystem): level + XP (55 levels, curve in `Data/ZSLevels.csv` →
+`CT_ZSLevels`), cash, owned weapons (each a unique instance, ready for per-gun attachments), the deployed loadout and
+lifetime stats (runs, wins, kills, headshots, best round, play time, weapons lost). A new profile starts with the
+starter guns (M4 Tactical + P9 Sidearm). Saved at deploy and at the end of every run.
+
+### Earning
+| Event | XP | Cash |
+|---|---|---|
+| Kill (walker) | 10 | $10 |
+| Runner | +5 | +$5 |
+| Headshot | +5 | +$5 |
+| Multi-kill (each extra kill within 1.2 s) | +10 | — |
+| Round survived | 100 + 25 × round | $50 × round |
+| **Win** (clear round 20 until the boss exists) | +2,500 | +$1,000 |
+
+Run earnings show top-right, marked **AT RISK**; popups appear next to the crosshair.
+
+### The risk rules
+- **Win:** keep your loadout, bank all run XP / cash plus the win bonus.
+- **Fail** (death, *Abandon Run*, quitting, or force-quitting the game): the deployed guns are **removed from your
+  inventory** and the run's XP / cash are **not banked**. Force-quit is caught on the next launch (the deploy writes an
+  "active run" flag to the save) and the get-ready screen tells you what was lost.
+- At deploy the get-ready screen lists what is **AT RISK**.
+- Until the market exists (Milestone 8), missing starter guns are re-issued for free at deploy so a loss can't leave
+  you unarmed. Stopping Play-In-Editor mid-run counts as a force quit too (intended).
+
+### Results screen
+After every run: outcome, round, kills, headshots, time, XP / cash (kept with the win bonus, or LOST), gear lost,
+level bar, level-ups and profile cash. **A / Enter** continues (restarts the run; the bunker replaces this in M7).
+
+### Pause menu
+**Start** (controller) / **Esc** (packaged game) → Resume, **Abandon Run** (asks twice, counts as a fail), Quit Game
+(also a fail mid-run). D-pad / arrows to move, A / Enter to select, B / Backspace back.
+
+### Console commands
+| Command | Effect |
+|---|---|
+| `ZSProfile` | Log level, XP, cash, weapons, stats |
+| `ZSGiveCash 5000` / `ZSGiveXP 10000` | Debug grants |
+| `ZSResetProfile` | Wipe the save |
+| `ZSWinRun` | End the current run as a win |

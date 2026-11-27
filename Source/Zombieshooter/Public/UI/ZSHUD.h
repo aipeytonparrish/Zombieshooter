@@ -25,6 +25,9 @@ private:
 	void DrawSurvival(const class AZSGameState_Survival* GS, const class AZSPlayerCharacter* Char, float Scale);
 	void DrawInteractPrompt(const AZSPlayerCharacter* Char, float Scale);
 	void DrawToasts(float Scale);
+	void DrawRunEconomy(const AZSGameState_Survival* GS, float Scale);
+	void DrawResults(const AZSGameState_Survival* GS, float Scale);
+	void DrawPauseMenu(float Scale);
 	void DrawCentered(const FString& Text, float Y, class UFont* Font, float TextScale, const FLinearColor& Color);
 
 	struct FToast

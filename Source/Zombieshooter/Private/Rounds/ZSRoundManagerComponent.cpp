@@ -11,6 +11,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
+#include "Rounds/ZSGameMode_Survival.h"
 #include "Zombieshooter.h"
 
 namespace
@@ -138,6 +139,10 @@ void UZSRoundManagerComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 			GS->PhaseTimeLeft = PhaseTimer;
 			PlayStinger(RoundEndSound, 0.35f, 0.55f);
 			UE_LOG(LogZS, Log, TEXT("Round %d cleared - break %.0f s"), GS->Round, BreakDuration);
+			if (AZSGameMode_Survival* GM = Cast<AZSGameMode_Survival>(GetOwner()))
+			{
+				GM->OnRoundCleared(GS->Round);
+			}
 		}
 		break;
 
@@ -346,6 +351,10 @@ void UZSRoundManagerComponent::HandleZombieKilled(AZSZombieBase* Zombie, AContro
 		{
 			++GS->Kills;
 			GS->Headshots += bHeadshot ? 1 : 0;
+			if (AZSGameMode_Survival* GM = Cast<AZSGameMode_Survival>(GetOwner()))
+			{
+				GM->RewardKill(Zombie, bHeadshot);
+			}
 		}
 		GS->ZombiesRemaining = ToSpawn + Alive;
 	}

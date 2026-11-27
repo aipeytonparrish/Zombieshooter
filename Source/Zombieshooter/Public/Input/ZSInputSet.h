@@ -67,6 +67,12 @@ public:
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "ZS|Input") TObjectPtr<UInputAction> Pause;
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "ZS|Input") TObjectPtr<UInputAction> ToggleMovementDebug;
 
+	// ---- Menus (work while paused) ----
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "ZS|Input") TObjectPtr<UInputAction> MenuConfirm;
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "ZS|Input") TObjectPtr<UInputAction> MenuBack;
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "ZS|Input") TObjectPtr<UInputAction> MenuUp;
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "ZS|Input") TObjectPtr<UInputAction> MenuDown;
+
 private:
 	UInputAction* MakeAction(const TCHAR* Name, EInputActionValueType ValueType);
 	void MapKey(UInputAction* Action, const FKey& Key);

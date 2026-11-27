@@ -18,6 +18,14 @@
 #include "Materials/MaterialInterface.h"
 #include "Misc/Paths.h"
 #include "TimerManager.h"
+#include "Combat/ZSGoreSubsystem.h"
+#include "Zombies/ZSSpitProjectile.h"
+#include "Rounds/ZSGameState_Survival.h"
+#include "Animation/Skeleton.h"
+#include "Engine/SkeletalMesh.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "GameFramework/DamageType.h"
+#include "EngineUtils.h"
 #include "Zombieshooter.h"
 
 int32 AZSZombieBase::LiveCount = 0;
@@ -245,8 +253,38 @@ void AZSZombieBase::ApplyTypeDefaults()
 		Health->MaxHealth = WalkerHealth * HealthMultiplier;
 		MoveSpeed = FMath::FRandRange(WalkerSpeedRange.X, WalkerSpeedRange.Y) * SpeedMultiplier;
 	}
+	switch (ZombieType)
+	{
+	case EZSZombieType::Crawler:
+		Health->MaxHealth = 70.f * HealthMultiplier;
+		break;
+	case EZSZombieType::Exploder:
+		Health->MaxHealth = 90.f * HealthMultiplier;
+		MoveSpeed *= 1.15f;
+		break;
+	case EZSZombieType::Spitter:
+		Health->MaxHealth = 85.f * HealthMultiplier;
+		SpecialCooldown = 2.f;
+		break;
+	case EZSZombieType::Brute:
+		Health->MaxHealth = 900.f * HealthMultiplier;
+		MoveSpeed = FMath::FRandRange(130.f, 160.f) * SpeedMultiplier;
+		AttackDamage = 40.f;
+		AttackRange = 175.f;
+		FlinchChance = 0.f;
+		DeathImpulse = 3000.f;
+		SpecialCooldown = 4.f;
+		break;
+	case EZSZombieType::Screamer:
+		Health->MaxHealth = 100.f * HealthMultiplier;
+		SpecialCooldown = 3.f;
+		break;
+	default:
+		break;
+	}
 	Health->Revive();   // apply the new max
 	Move->MaxWalkSpeed = MoveSpeed;
+	ApplySpecialLook();
 }
 
 UZSZombieAnimInstance* AZSZombieBase::GetZombieAnim() const
@@ -273,6 +311,11 @@ void AZSZombieBase::Tick(float DeltaSeconds)
 
 	StateTime += DeltaSeconds;
 	FlinchTimer = FMath::Max(0.f, FlinchTimer - DeltaSeconds);
+	UpdateSpecial(DeltaSeconds);
+	if (SpecialTime >= 0.f)
+	{
+		return;   // a special action (spit, scream, fuse) owns this frame
+	}
 
 	switch (State)
 	{
@@ -334,7 +377,11 @@ void AZSZombieBase::UpdateChase(float DeltaSeconds)
 
 	const FVector ToTarget = Target->GetActorLocation() - GetActorLocation();
 	const float Dist2D = ToTarget.Size2D();
-	if (Dist2D <= AttackRange && FMath::Abs(ToTarget.Z) < 130.f)
+	if (TrySpecialAction(Dist2D, Target))
+	{
+		return;
+	}
+	if (Dist2D <= AttackRange && FMath::Abs(ToTarget.Z) < (bCrawling ? 160.f : 130.f))
 	{
 		StartAttack();
 		return;
@@ -395,7 +442,7 @@ void AZSZombieBase::StartAttack()
 
 	AttackIndex = AttackAnims.Num() > 0 ? FMath::RandRange(0, AttackAnims.Num() - 1) : INDEX_NONE;
 	AttackHitFraction = Appearance.AttackHitFractions.IsValidIndex(AttackIndex) ? Appearance.AttackHitFractions[AttackIndex] : 0.45f;
-	const float Rate = ZombieType == EZSZombieType::Runner ? 1.3f : 1.05f;
+	const float Rate = ZombieType == EZSZombieType::Runner ? 1.3f : (ZombieType == EZSZombieType::Brute ? 0.85f : 1.05f);
 	const float Duration = (AttackIndex != INDEX_NONE && GetZombieAnim())
 		? GetZombieAnim()->PlayAction(AttackAnims[AttackIndex], Rate, 0.12f, 0.2f)
 		: 1.2f;
@@ -420,6 +467,13 @@ void AZSZombieBase::UpdateAttack(float DeltaSeconds)
 			if (ToTarget.Size2D() <= AttackRange + AttackReachBonus && FMath::Abs(ToTarget.Z) < 140.f && Angle < 70.f)
 			{
 				UGameplayStatics::ApplyDamage(Target, AttackDamage, GetController(), this, UDamageType::StaticClass());
+				if (ZombieType == EZSZombieType::Brute)
+				{
+					if (ACharacter* Char = Cast<ACharacter>(Target))
+					{
+						Char->LaunchCharacter(ToTarget.GetSafeNormal2D() * 900.f + FVector(0.f, 0.f, 320.f), true, true);
+					}
+				}
 			}
 		}
 	}
@@ -451,6 +505,20 @@ void AZSZombieBase::FaceTarget(float DeltaSeconds, float Rate)
 
 float AZSZombieBase::TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
+	if (State == EZSZombieState::Dead)
+	{
+		return 0.f;
+	}
+	// Player power-ups.
+	if (EventInstigator && EventInstigator->IsPlayerController())
+	{
+		LastInstigator = EventInstigator;
+		if (const AZSGameState_Survival* GS = GetWorld()->GetGameState<AZSGameState_Survival>())
+		{
+			if (GS->IsPowerUpActive(EZSPowerUp::OneShot)) { DamageAmount = FMath::Max(DamageAmount, Health->GetHealth() + 1.f); }
+			else if (GS->IsPowerUpActive(EZSPowerUp::Overkill)) { DamageAmount *= 2.f; }
+		}
+	}
 	if (DamageEvent.IsOfType(FPointDamageEvent::ClassID))
 	{
 		const FPointDamageEvent& Point = static_cast<const FPointDamageEvent&>(DamageEvent);
@@ -466,12 +534,44 @@ float AZSZombieBase::TakeDamage(float DamageAmount, const FDamageEvent& DamageEv
 		}
 	}
 	LastHitDamage = DamageAmount;
+	const bool bLethal = DamageAmount >= Health->GetHealth();
+
+	// Dismemberment: limbs come off after enough damage, or from a heavy killing shot; heads pop on big headshot kills.
+	if (UZSGoreSubsystem::DismemberEnabled() && LastHitBone != NAME_None && DamageEvent.IsOfType(FPointDamageEvent::ClassID))
+	{
+		const FName Cut = SeverBoneFor(LastHitBone);
+		if (Cut != NAME_None && !Severed.Contains(Cut))
+		{
+			float& Taken = LimbDamage.FindOrAdd(Cut);
+			Taken += DamageAmount;
+			const bool bHead = Cut == TEXT("head");
+			const bool bBigHit = DamageAmount >= 28.f;
+			bool bCut = false;
+			if (bHead)
+			{
+				bCut = bLethal && (DamageAmount >= 70.f || (bBigHit && FMath::FRand() < 0.55f));
+			}
+			else
+			{
+				bCut = Taken >= Health->MaxHealth * 0.5f || (bLethal && bBigHit && FMath::FRand() < 0.5f);
+			}
+			if (bCut)
+			{
+				Sever(Cut, LastHitDirection);
+				const bool bLeg = Cut.ToString().StartsWith(TEXT("thigh")) || Cut.ToString().StartsWith(TEXT("calf"));
+				if (bLeg && !bLethal && !bCrawling && ZombieType != EZSZombieType::Brute)
+				{
+					BecomeCrawler(false);
+				}
+			}
+		}
+	}
 
 	const float Applied = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
 
 	// Flinch (the health component already handled death if this was lethal).
-	if (State != EZSZombieState::Dead && FlinchTimer <= 0.f && State != EZSZombieState::Attacking &&
-		(bLastHitHead || FMath::FRand() < FlinchChance))
+	if (State != EZSZombieState::Dead && FlinchTimer <= 0.f && State != EZSZombieState::Attacking && SpecialTime < 0.f && !bCrawling &&
+		ZombieType != EZSZombieType::Brute && (bLastHitHead || FMath::FRand() < FlinchChance))
 	{
 		UZSZombieAnimInstance* Anim = GetZombieAnim();
 		UAnimSequence* Hit = RandomAnim(HitAnims);
@@ -500,6 +600,11 @@ void AZSZombieBase::HandleDeath(UZSHealthComponent* InHealth, AController* Kille
 	State = EZSZombieState::Dead;
 	--LiveCount;
 	OnKilled.Broadcast(this, Killer, bLastHitHead);
+	if (ZombieType == EZSZombieType::Exploder && !bExploded)
+	{
+		FTimerHandle Boom;
+		GetWorldTimerManager().SetTimer(Boom, FTimerDelegate::CreateWeakLambda(this, [this]() { Explode(); }), 0.12f, false);
+	}
 
 	if (UZSAimAssistSubsystem* Registry = GetWorld()->GetSubsystem<UZSAimAssistSubsystem>())
 	{
@@ -556,4 +661,375 @@ void AZSZombieBase::EnterRagdoll()
 		MeshComp->AddImpulse(Push, LastHitBone, true);
 	}
 	MeshComp->AddImpulse(Push * 0.35f + FVector(0.f, 0.f, 60.f), TEXT("pelvis"), true);
+}
+
+// =============================================================================================
+// Specials (Milestone 11)
+// =============================================================================================
+
+namespace
+{
+	const TCHAR* MannequinSkeleton = TEXT("/Game/Zombie_deaths_crawls/demo/Characters/Mannequins/Meshes/SK_Mannequin.SK_Mannequin");
+	const TCHAR* CrawlPath = TEXT("/Game/Zombie_deaths_crawls/Animations/");
+
+	UAnimSequence* LoadCrawl(const TCHAR* Name)
+	{
+		return LoadObject<UAnimSequence>(nullptr, *FString::Printf(TEXT("%s%s.%s"), CrawlPath, Name, Name), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	}
+}
+
+FText AZSZombieBase::TypeName(EZSZombieType Type)
+{
+	switch (Type)
+	{
+	case EZSZombieType::Runner:   return NSLOCTEXT("ZS", "ZRunner", "RUNNER");
+	case EZSZombieType::Crawler:  return NSLOCTEXT("ZS", "ZCrawler", "CRAWLER");
+	case EZSZombieType::Exploder: return NSLOCTEXT("ZS", "ZExploder", "BLOATER");
+	case EZSZombieType::Spitter:  return NSLOCTEXT("ZS", "ZSpitter", "SPITTER");
+	case EZSZombieType::Brute:    return NSLOCTEXT("ZS", "ZBrute", "BRUTE");
+	case EZSZombieType::Screamer: return NSLOCTEXT("ZS", "ZScreamer", "SCREAMER");
+	default:                      return NSLOCTEXT("ZS", "ZWalker", "WALKER");
+	}
+}
+
+void AZSZombieBase::ApplySpecialLook()
+{
+	FLinearColor Glow(0.f, 0.f, 0.f, 0.f);
+	float Scale = 1.f;
+	switch (ZombieType)
+	{
+	case EZSZombieType::Exploder: Glow = FLinearColor(1.f, 0.25f, 0.02f, 0.35f); Scale = 1.12f; break;
+	case EZSZombieType::Spitter:  Glow = FLinearColor(0.3f, 1.f, 0.05f, 0.3f); break;
+	case EZSZombieType::Brute:    Glow = FLinearColor(0.5f, 0.02f, 0.02f, 0.18f); Scale = 1.4f; break;
+	case EZSZombieType::Screamer: Glow = FLinearColor(0.7f, 0.5f, 1.f, 0.3f); Scale = 0.95f; break;
+	default: break;
+	}
+	if (Scale != 1.f)
+	{
+		SetActorScale3D(FVector(Scale));
+	}
+	if (Glow.A > 0.f)
+	{
+		if (UMaterialInterface* Mat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ZS/Materials/M_ZS_Glow.M_ZS_Glow"), nullptr, LOAD_NoWarn | LOAD_Quiet))
+		{
+			UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Mat, this);
+			MID->SetVectorParameterValue(TEXT("Color"), FLinearColor(Glow.R, Glow.G, Glow.B));
+			MID->SetScalarParameterValue(TEXT("Opacity"), Glow.A);
+			MID->SetScalarParameterValue(TEXT("Fresnel"), 2.5f);
+			GetMesh()->SetOverlayMaterial(MID);
+		}
+	}
+	if (ZombieType == EZSZombieType::Crawler)
+	{
+		BecomeCrawler(true);
+	}
+}
+
+void AZSZombieBase::BecomeCrawler(bool bHideLegs)
+{
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	USkeleton* Mine = MeshComp->GetSkeletalMeshAsset() ? MeshComp->GetSkeletalMeshAsset()->GetSkeleton() : nullptr;
+	USkeleton* Manny = LoadObject<USkeleton>(nullptr, MannequinSkeleton, nullptr, LOAD_NoWarn | LOAD_Quiet);
+	UAnimSequence* Crawl = LoadCrawl(TEXT("A_zombie_crawl_front"));
+	UAnimSequence* Idle = LoadCrawl(TEXT("A_Zombie_Crawls_idle_1"));
+	if (!Mine || !Manny || !Crawl)
+	{
+		// No crawl clips on this PC: losing the legs is fatal instead.
+		if (!bHideLegs && Health) { Health->Kill(nullptr, nullptr); }
+		return;
+	}
+	if (!Mine->GetCompatibleSkeletons().Contains(TSoftObjectPtr<USkeleton>(Manny)))
+	{
+		Mine->AddCompatibleSkeleton(Manny);   // same bone names: the mannequin crawl clips play on the zombie skeleton
+	}
+	bCrawling = true;
+	if (bHideLegs)
+	{
+		for (const TCHAR* Leg : { TEXT("calf_l"), TEXT("calf_r") })
+		{
+			MeshComp->HideBoneByName(Leg, PBO_None);
+			Severed.Add(Leg);
+		}
+	}
+	GetCapsuleComponent()->SetCapsuleHalfHeight(40.f);
+	MeshComp->SetRelativeLocation(FVector(0.f, 0.f, -40.f));
+	MoveSpeed = FMath::FRandRange(85.f, 115.f) * SpeedMultiplier;
+	GetCharacterMovement()->MaxWalkSpeed = MoveSpeed;
+	AttackRange = 110.f;
+	AttackAnims.Reset();
+	for (const TCHAR* A : { TEXT("A_Zombie_crawl_biting_1"), TEXT("A_Zombie_crawl_biting_2") })
+	{
+		if (UAnimSequence* Anim = LoadCrawl(A)) { AttackAnims.Add(Anim); }
+	}
+	Appearance.AttackHitFractions = { 0.5f, 0.5f };
+	HitAnims.Reset();
+	if (UZSZombieAnimInstance* Anim = GetZombieAnim())
+	{
+		Anim->StopAction(0.1f);
+		Anim->SetLocomotion(Idle ? Idle : Crawl, Crawl, Crawl, 75.f, 75.f);
+	}
+	if (State == EZSZombieState::Attacking || State == EZSZombieState::Staggered)
+	{
+		State = EZSZombieState::Chasing;
+		StateTime = 0.f;
+	}
+}
+
+void AZSZombieBase::ApplySpeedBuff(float Multiplier, float Duration)
+{
+	if (State == EZSZombieState::Dead || ZombieType == EZSZombieType::Brute)
+	{
+		return;
+	}
+	BuffMultiplier = FMath::Max(BuffMultiplier, Multiplier);
+	BuffTime = FMath::Max(BuffTime, Duration);
+	GetCharacterMovement()->MaxWalkSpeed = MoveSpeed * BuffMultiplier;
+}
+
+bool AZSZombieBase::HasLineOfSight(const APawn* Target) const
+{
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(ZSZombieLOS), false, this);
+	Params.AddIgnoredActor(Target);
+	return !GetWorld()->LineTraceSingleByChannel(Hit, GetMesh()->GetSocketLocation(TEXT("head")), Target->GetActorLocation() + FVector(0, 0, 40.f), ECC_Visibility, Params);
+}
+
+void AZSZombieBase::UpdateSpecial(float DeltaSeconds)
+{
+	SpecialCooldown = FMath::Max(0.f, SpecialCooldown - DeltaSeconds);
+	if (BuffTime > 0.f)
+	{
+		BuffTime -= DeltaSeconds;
+		if (BuffTime <= 0.f)
+		{
+			BuffMultiplier = 1.f;
+			GetCharacterMovement()->MaxWalkSpeed = MoveSpeed;
+		}
+	}
+	if (ChargeTime > 0.f)
+	{
+		ChargeTime -= DeltaSeconds;
+		if (const APawn* T = GetTarget())
+		{
+			AddMovementInput((T->GetActorLocation() - GetActorLocation()).GetSafeNormal2D());
+		}
+		if (ChargeTime <= 0.f)
+		{
+			GetCharacterMovement()->MaxWalkSpeed = MoveSpeed * BuffMultiplier;
+			if (UZSZombieAnimInstance* Anim = GetZombieAnim())
+			{
+				Anim->SetLocomotion(LoadAnim(Appearance.Idles.Num() ? Appearance.Idles[0] : FString()), LoadAnim(Appearance.Walks.Num() ? Appearance.Walks[0] : FString()), LoadAnim(Appearance.Run), Appearance.WalkAnimSpeed, Appearance.RunAnimSpeed);
+			}
+		}
+	}
+
+	if (SpecialTime < 0.f)
+	{
+		return;
+	}
+	// A running special action: spit, scream or exploder fuse.
+	SpecialTime += DeltaSeconds;
+	FaceTarget(DeltaSeconds, 6.f);
+	switch (ZombieType)
+	{
+	case EZSZombieType::Spitter:
+		if (!bSpecialFired && SpecialTime >= 0.55f) { bSpecialFired = true; FireSpit(); }
+		if (SpecialTime >= 1.1f) { SpecialTime = -1.f; State = EZSZombieState::Chasing; StateTime = 0.f; RepathTimer = 0.f; }
+		break;
+	case EZSZombieType::Screamer:
+		if (!bSpecialFired && SpecialTime >= 0.6f) { bSpecialFired = true; Scream(); }
+		if (SpecialTime >= 1.8f) { SpecialTime = -1.f; State = EZSZombieState::Chasing; StateTime = 0.f; RepathTimer = 0.f; }
+		break;
+	case EZSZombieType::Exploder:
+		// Fuse: swell and flash, then burst.
+		SetActorScale3D(FVector(1.12f + SpecialTime * 0.25f + 0.04f * FMath::Sin(SpecialTime * 40.f)));
+		if (SpecialTime >= 1.0f) { SpecialTime = -1.f; Health->Kill(nullptr, this); }
+		break;
+	default:
+		SpecialTime = -1.f;
+		break;
+	}
+}
+
+bool AZSZombieBase::TrySpecialAction(float Dist2D, APawn* Target)
+{
+	auto Begin = [this](UAnimSequence* Anim, float Rate)
+	{
+		if (AZSZombieAIController* AI = Cast<AZSZombieAIController>(GetController())) { AI->StopMovement(); }
+		GetCharacterMovement()->StopMovementImmediately();
+		SpecialTime = 0.f;
+		bSpecialFired = false;
+		if (Anim && GetZombieAnim()) { GetZombieAnim()->PlayAction(Anim, Rate, 0.12f, 0.2f); }
+	};
+	switch (ZombieType)
+	{
+	case EZSZombieType::Exploder:
+		if (Dist2D < 230.f)
+		{
+			Begin(RageAnim, 1.6f);
+			return true;
+		}
+		break;
+	case EZSZombieType::Spitter:
+		if (SpecialCooldown <= 0.f && Dist2D > 450.f && Dist2D < 1800.f && HasLineOfSight(Target))
+		{
+			Begin(AttackAnims.Num() ? AttackAnims[0].Get() : nullptr, 1.2f);
+			SpecialCooldown = FMath::FRandRange(3.f, 4.5f);
+			return true;
+		}
+		break;
+	case EZSZombieType::Screamer:
+		if (SpecialCooldown <= 0.f && Dist2D < 2500.f && HasLineOfSight(Target))
+		{
+			Begin(RageAnim, 1.f);
+			SpecialCooldown = FMath::FRandRange(9.f, 12.f);
+			return true;
+		}
+		break;
+	case EZSZombieType::Brute:
+		if (SpecialCooldown <= 0.f && ChargeTime <= 0.f && Dist2D > 500.f && Dist2D < 1400.f && HasLineOfSight(Target))
+		{
+			// Charge: sprint straight at the player for a moment.
+			ChargeTime = 1.7f;
+			SpecialCooldown = FMath::FRandRange(7.f, 10.f);
+			GetCharacterMovement()->MaxWalkSpeed = 560.f;
+			if (UZSZombieAnimInstance* Anim = GetZombieAnim())
+			{
+				UAnimSequence* Run = LoadAnim(Appearance.Run);
+				Anim->SetLocomotion(Run, Run, Run, Appearance.RunAnimSpeed, Appearance.RunAnimSpeed);
+			}
+		}
+		break;
+	default:
+		break;
+	}
+	return false;
+}
+
+void AZSZombieBase::FireSpit()
+{
+	const APawn* Target = GetTarget();
+	if (!Target)
+	{
+		return;
+	}
+	const FVector From = GetMesh()->GetSocketLocation(TEXT("head")) + GetActorForwardVector() * 40.f;
+	// Lead the target a little.
+	const FVector Aim = Target->GetActorLocation() + Target->GetVelocity() * 0.5f - FVector(0, 0, 60.f);
+	FActorSpawnParameters Params;
+	Params.Owner = this;
+	Params.Instigator = this;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	if (AZSSpitProjectile* Spit = GetWorld()->SpawnActor<AZSSpitProjectile>(AZSSpitProjectile::StaticClass(), FTransform(From), Params))
+	{
+		Spit->Launch(AZSSpitProjectile::AimVelocity(From, Aim, 1400.f));
+	}
+}
+
+void AZSZombieBase::Scream()
+{
+	int32 Buffed = 0;
+	for (TActorIterator<AZSZombieBase> It(GetWorld()); It; ++It)
+	{
+		if (*It != this && !It->IsDead() && FVector::Dist(It->GetActorLocation(), GetActorLocation()) < 1800.f)
+		{
+			It->ApplySpeedBuff(1.45f, 7.f);
+			++Buffed;
+		}
+	}
+	UE_LOG(LogZS, Log, TEXT("Screamer enraged %d zombies."), Buffed);
+}
+
+void AZSZombieBase::Explode()
+{
+	if (bExploded)
+	{
+		return;
+	}
+	bExploded = true;
+	const FVector Center = GetMesh()->GetSocketLocation(TEXT("spine_03"));
+	const float Radius = 420.f;
+
+	// Hurts the player (falloff) and other zombies; kills credit whoever killed the exploder.
+	if (APawn* P = GetTarget())
+	{
+		const float D = FVector::Dist(P->GetActorLocation(), Center);
+		if (D < Radius)
+		{
+			UGameplayStatics::ApplyDamage(P, 15.f + 50.f * (1.f - D / Radius), nullptr, this, UDamageType::StaticClass());
+		}
+	}
+	for (TActorIterator<AZSZombieBase> It(GetWorld()); It; ++It)
+	{
+		if (*It != this && !It->IsDead())
+		{
+			const float D = FVector::Dist(It->GetActorLocation(), Center);
+			if (D < Radius)
+			{
+				FPointDamageEvent Ev;
+				Ev.Damage = 120.f * (1.f - D / Radius) + 20.f;
+				Ev.ShotDirection = (It->GetActorLocation() - Center).GetSafeNormal();
+				Ev.HitInfo.ImpactPoint = It->GetActorLocation();
+				It->TakeDamage(Ev.Damage, Ev, LastInstigator.Get(), this);
+			}
+		}
+	}
+
+	if (UZSGoreSubsystem* Gore = GetWorld()->GetSubsystem<UZSGoreSubsystem>())
+	{
+		Gore->SpawnGibs(Center, FVector::UpVector, 14, 1.4f);
+		Gore->SplatterNearCamera(Center, 700.f, 1.f);
+	}
+	if (UZSBloodSubsystem* Blood = GetWorld()->GetSubsystem<UZSBloodSubsystem>())
+	{
+		for (int32 i = 0; i < 6; ++i)
+		{
+			Blood->SpawnHitBlood(Center, (FMath::VRand() + FVector(0, 0, 0.3f)).GetSafeNormal(), 2.f);
+		}
+		Blood->SpawnPool(Center - FVector(0, 0, 80.f));
+	}
+	if (USoundBase* Sound = LoadObject<USoundBase>(nullptr, TEXT("/Game/GunSoundsPackVol1/Bonus/cue/Explosion_Medium_1-1_Cue.Explosion_Medium_1-1_Cue"), nullptr, LOAD_NoWarn | LOAD_Quiet))
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, Sound, Center);
+	}
+	// Nothing left of it.
+	if (UZSGoreSubsystem::DismemberEnabled())
+	{
+		GetMesh()->SetVisibility(false, true);
+		GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		SetLifeSpan(1.f);
+	}
+}
+
+FName AZSZombieBase::SeverBoneFor(FName HitBone)
+{
+	const FString B = HitBone.ToString().ToLower();
+	const TCHAR* Side = B.EndsWith(TEXT("_l")) ? TEXT("_l") : (B.EndsWith(TEXT("_r")) ? TEXT("_r") : nullptr);
+	if (B.Contains(TEXT("head")) || B.Contains(TEXT("neck"))) { return TEXT("head"); }
+	if (!Side) { return NAME_None; }
+	if (B.Contains(TEXT("hand")) || B.Contains(TEXT("lowerarm"))) { return FName(*(FString(TEXT("lowerarm")) + Side)); }
+	if (B.Contains(TEXT("upperarm"))) { return FName(*(FString(TEXT("upperarm")) + Side)); }
+	if (B.Contains(TEXT("calf")) || B.Contains(TEXT("foot"))) { return FName(*(FString(TEXT("calf")) + Side)); }
+	if (B.Contains(TEXT("thigh"))) { return FName(*(FString(TEXT("thigh")) + Side)); }
+	return NAME_None;
+}
+
+void AZSZombieBase::Sever(FName Bone, const FVector& Direction)
+{
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	if (MeshComp->GetBoneIndex(Bone) == INDEX_NONE)
+	{
+		return;
+	}
+	Severed.Add(Bone);
+	UE_LOG(LogZS, Log, TEXT("Severed %s on %s"), *Bone.ToString(), *GetName());
+	const FVector Where = MeshComp->GetSocketLocation(Bone);
+	MeshComp->HideBoneByName(Bone, PBO_Term);
+	if (UZSGoreSubsystem* Gore = GetWorld()->GetSubsystem<UZSGoreSubsystem>())
+	{
+		const bool bHead = Bone == TEXT("head");
+		Gore->SpawnGibs(Where, Direction, bHead ? 8 : 4, bHead ? 1.1f : 0.9f);
+		Gore->AddStump(MeshComp, Bone, bHead ? 3.f : 2.2f);
+		Gore->SplatterNearCamera(Where, 380.f, bHead ? 0.7f : 0.45f);
+	}
 }

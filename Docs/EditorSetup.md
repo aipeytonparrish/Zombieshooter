@@ -437,3 +437,39 @@ A diamond with the distance points to the ring / beacon (at the screen edge when
 pays 150 + 25 × round XP and $100 + 10 × round (run earnings, at risk) and counts toward missions.
 
 Console: `ZSTask 1|2|3` starts a task now.
+
+## Milestone 11 — Gore, special zombies, power-ups
+
+### Special zombies (join from round 4; chances grow with the round)
+| Zombie | From round | What it does | Tell |
+|---|---|---|---|
+| **Crawler** | 4 | Legless, low to the ground, slow, bites | crawling |
+| **Bloater** | 5 | Rushes you, swells and bursts at close range (or when killed): big area damage that also kills other zombies | orange glow |
+| **Spitter** | 7 | Lobs acid from range; the glob leaves a burning pool | green glow |
+| **Screamer** | 9 | Shrieks: nearby zombies get 45 % faster for 7 s | purple glow |
+| **Brute** | 10 | Huge (900 HP), never flinches, charges, knocks you back (max 2 alive) | dark red glow, 1.4× size |
+
+Any walker or runner that loses a leg drops to the ground and becomes a crawler. Crawling uses the mannequin crawl
+clips from *Zombie_deaths_crawls* (the zombie skeletons are marked compatible at runtime — same bone names).
+Specials pay +20 XP/cash (Brute +150).
+
+### Gore
+- Arms (forearm / upper arm) and legs (calf / thigh) come off after enough damage to that limb or from a heavy killing
+  shot; heads pop on big headshot kills. Severed stumps pump blood for a few seconds; flesh chunks fly.
+- Blood decals build up for the whole run (up to 256 on Full).
+- **Screen blood** when gore happens right in front of you (Bloater bursts especially).
+- **Gore setting:** `ZSGore 0` off (no blood at all), `ZSGore 1` reduced (blood, no dismemberment), `ZSGore 2` full
+  (default). Saved in GameUserSettings; the options menu gets it in Milestone 14.
+
+### Power-ups (2.2 % per kill, one on the ground at a time)
+| Power-up | Effect |
+|---|---|
+| **OVERKILL** | Double damage, 20 s |
+| **ONE SHOT** | Every hit kills, 15 s |
+| **PAYDAY** | Double run XP and cash, 30 s |
+| **SCORCHED EARTH** | Kills every zombie on the map (you get the kills) |
+
+They float as glowing orbs with their name; active ones show as timer bars bottom-centre.
+
+Console: `ZSZombies <count> <type>` (3 crawler, 4 bloater, 5 spitter, 6 brute, 7 screamer, 8 one of each),
+`ZSPowerUp 1-4`, `ZSHurtBone <bone> <damage>` (gore testing).

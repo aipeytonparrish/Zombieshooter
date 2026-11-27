@@ -130,6 +130,18 @@ public:
 	UFUNCTION(Exec)
 	void ZSProbe();
 
+	/** Gore: 0 off, 1 reduced (blood only), 2 full (dismemberment, gibs, screen blood). Saved. */
+	UFUNCTION(Exec)
+	void ZSGore(int32 Level);
+
+	/** Debug: shoot every living zombie in a bone, e.g. "ZSHurtBone lowerarm_l 60". */
+	UFUNCTION(Exec)
+	void ZSHurtBone(const FString& Bone, float Damage);
+
+	/** Power-up now: 1 Overkill, 2 One Shot, 3 Scorched Earth, 4 Payday. */
+	UFUNCTION(Exec)
+	void ZSPowerUp(int32 Type);
+
 	/** Start a timed task now: 1 kill rush, 2 hold the zone, 3 supply beacon. */
 	UFUNCTION(Exec)
 	void ZSTask(int32 Type);

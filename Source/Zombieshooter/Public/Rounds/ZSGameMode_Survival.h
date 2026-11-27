@@ -7,6 +7,7 @@
 
 class UZSRoundManagerComponent;
 class UZSRunTaskComponent;
+enum class EZSPowerUp : uint8;
 class AZSWeaponBase;
 class AZSZombieBase;
 
@@ -48,6 +49,9 @@ public:
 	void RewardKill(AZSZombieBase* Zombie, bool bHeadshot);
 	void OnRoundStarted(int32 Round);
 	void OnRoundCleared(int32 Round);
+
+	/** Power-up picked up: start its timer (or fire it, for Scorched Earth). */
+	void ActivatePowerUp(EZSPowerUp PowerUp);
 
 	/** Adds run XP / cash (at risk) with a popup. */
 	void AddReward(int32 XP, int32 Cash, const FText& Label, bool bBig = false);

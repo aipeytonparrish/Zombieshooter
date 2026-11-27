@@ -63,6 +63,11 @@ void AZSHUD::DrawHUD()
 		DrawInteractPrompt(Char, Scale);
 	}
 	DrawToasts(Scale);
+	{
+		const float Now = GetWorld()->GetRealTimeSeconds();
+		DrawScreenBlood(FMath::Clamp(Now - LastDrawTime, 0.f, 0.1f));
+		LastDrawTime = Now;
+	}
 	if (GS)
 	{
 		DrawSurvival(GS, Char, Scale);
@@ -424,6 +429,7 @@ void AZSHUD::DrawSurvival(const AZSGameState_Survival* GS, const AZSPlayerCharac
 		DrawRunEconomy(GS, Scale);
 		DrawTask(GS, Scale);
 		DrawMissionTracker(Scale);
+		DrawPowerUps(GS, Scale);
 	}
 	DrawPauseMenu(Scale);
 }
@@ -552,6 +558,95 @@ void AZSHUD::DrawTask(const AZSGameState_Survival* GS, float Scale)
 	{
 		const bool bOk = GS->TaskResult.ToString().Contains(TEXT("COMPLETE"));
 		DrawCentered(GS->TaskResult.ToString(), Canvas->ClipY * 0.34f, Font, 2.f * Scale, bOk ? HeadGold : KillRed);
+	}
+}
+
+void AZSHUD::AddScreenBlood(const APawn* Player, float Amount)
+{
+	const APlayerController* PC = Player ? Cast<APlayerController>(Player->GetController()) : nullptr;
+	AZSHUD* HUD = PC ? Cast<AZSHUD>(PC->GetHUD()) : nullptr;
+	if (!HUD)
+	{
+		return;
+	}
+	const int32 Count = FMath::Clamp(FMath::RoundToInt(Amount * 7.f), 1, 10);
+	for (int32 i = 0; i < Count; ++i)
+	{
+		FBloodBlob& B = HUD->BloodBlobs.AddDefaulted_GetRef();
+		// Mostly towards the edges, some across the middle for big splatters.
+		const float Edge = FMath::FRand() < 0.75f ? 1.f : 0.5f;
+		B.Pos = FVector2D(FMath::FRandRange(0.05f, 0.95f), FMath::FRandRange(0.05f, 0.95f));
+		B.Pos = FVector2D(0.5f, 0.5f) + (B.Pos - FVector2D(0.5f, 0.5f)).GetSafeNormal() * FMath::FRandRange(0.2f, 0.48f) * Edge;
+		B.Radius = FMath::FRandRange(30.f, 90.f) * (0.6f + Amount);
+		B.MaxLife = B.Life = FMath::FRandRange(1.8f, 3.2f);
+		for (int32 s = 0; s < 16; ++s) { B.Shape.Add(FMath::FRandRange(0.65f, 1.25f)); }
+	}
+	while (HUD->BloodBlobs.Num() > 30) { HUD->BloodBlobs.RemoveAt(0); }
+}
+
+void AZSHUD::DrawScreenBlood(float DeltaTime)
+{
+	const float Scale = Canvas->ClipY / 1080.f;
+	for (int32 i = BloodBlobs.Num() - 1; i >= 0; --i)
+	{
+		FBloodBlob& B = BloodBlobs[i];
+		B.Life -= DeltaTime;
+		if (B.Life <= 0.f)
+		{
+			BloodBlobs.RemoveAtSwap(i);
+			continue;
+		}
+		const float A = FMath::Clamp(B.Life / (B.MaxLife * 0.6f), 0.f, 1.f) * 0.8f;
+		const FVector2D C(B.Pos.X * Canvas->ClipX, B.Pos.Y * Canvas->ClipY + (B.MaxLife - B.Life) * 6.f * Scale);   // slowly runs down
+		const float R = B.Radius * Scale;
+		const FLinearColor Col(0.35f, 0.f, 0.f, A);
+		const int32 N = B.Shape.Num();
+		for (int32 s = 0; s < N; ++s)
+		{
+			const float A0 = 2.f * PI * s / N, A1 = 2.f * PI * (s + 1) / N;
+			const FVector2D P0 = C + FVector2D(FMath::Cos(A0), FMath::Sin(A0)) * R * B.Shape[s];
+			const FVector2D P1 = C + FVector2D(FMath::Cos(A1), FMath::Sin(A1)) * R * B.Shape[(s + 1) % N];
+			FCanvasTriangleItem Tri(C, P0, P1, GWhiteTexture);
+			Tri.SetColor(Col);
+			Tri.BlendMode = SE_BLEND_Translucent;
+			Canvas->DrawItem(Tri);
+		}
+	}
+}
+
+void AZSHUD::DrawPowerUps(const AZSGameState_Survival* GS, float Scale)
+{
+	UFont* Font = GEngine->GetMediumFont();
+	const float Now = GetWorld()->GetTimeSeconds();
+	TArray<EZSPowerUp> Active;
+	for (int32 i = 1; i < (int32)EZSPowerUp::MAX; ++i)
+	{
+		if (GS->PowerUpTimeLeft((EZSPowerUp)i) > 0.f) { Active.Add((EZSPowerUp)i); }
+	}
+	const float W = 190.f * Scale;
+	float X = Canvas->ClipX * 0.5f - Active.Num() * W * 0.5f;
+	const float Y = Canvas->ClipY - 150.f * Scale;
+	for (const EZSPowerUp P : Active)
+	{
+		const float Left = GS->PowerUpTimeLeft(P);
+		FLinearColor C = AZSGameState_Survival::PowerUpColor(P);
+		if (Left < 4.f && FMath::Fmod(Now * 4.f, 1.f) < 0.4f) { C.A = 0.35f; }
+		const FString Name = AZSGameState_Survival::PowerUpName(P).ToString();
+		float TW, TH;
+		GetTextSize(Name, TW, TH, Font, 1.2f * Scale);
+		DrawText(Name, HudShadow, X + (W - TW) * 0.5f + 2.f, Y + 2.f, Font, 1.2f * Scale);
+		DrawText(Name, C, X + (W - TW) * 0.5f, Y, Font, 1.2f * Scale);
+		const float Dur = FMath::Max(1.f, GS->PowerUpDuration[(int32)P]);
+		FCanvasTileItem Bar(FVector2D(X + 20.f * Scale, Y + 30.f * Scale), FVector2D((W - 40.f * Scale) * Left / Dur, 5.f * Scale), C);
+		Bar.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(Bar);
+		X += W;
+	}
+	if (Now - GS->PowerUpFlashTime < 2.f)
+	{
+		FLinearColor C = HeadGold;
+		C.A = FMath::Clamp(2.f - (Now - GS->PowerUpFlashTime), 0.f, 1.f);
+		DrawCentered(GS->PowerUpFlash.ToString(), Canvas->ClipY * 0.4f, GEngine->GetLargeFont(), 2.4f * Scale, C);
 	}
 }
 

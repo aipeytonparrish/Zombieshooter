@@ -16,6 +16,18 @@ enum class EZSRoundPhase : uint8
 };
 
 /** A "+15 XP  $15" popup on the HUD. */
+/** Timed / instant power-ups dropped by zombies (Milestone 11). */
+UENUM(BlueprintType)
+enum class EZSPowerUp : uint8
+{
+	None,
+	Overkill,       // double damage
+	OneShot,        // every hit kills
+	ScorchedEarth,  // kills every zombie on the map (instant)
+	Payday,         // double run XP and cash
+	MAX UMETA(Hidden)
+};
+
 USTRUCT(BlueprintType)
 struct FZSRewardPopup
 {
@@ -77,6 +89,43 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") float TaskStartTime = -100.f;
 	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") FText TaskResult;
 	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") float TaskResultTime = -100.f;
+
+	// ---- Power-ups ----
+	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") FText PowerUpFlash;
+	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") float PowerUpFlashTime = -100.f;
+	float PowerUpEnd[(int32)EZSPowerUp::MAX] = {};
+	float PowerUpDuration[(int32)EZSPowerUp::MAX] = {};
+
+	bool IsPowerUpActive(EZSPowerUp P) const
+	{
+		return GetWorld() && GetWorld()->GetTimeSeconds() < PowerUpEnd[(int32)P];
+	}
+	float PowerUpTimeLeft(EZSPowerUp P) const
+	{
+		return GetWorld() ? FMath::Max(0.f, PowerUpEnd[(int32)P] - GetWorld()->GetTimeSeconds()) : 0.f;
+	}
+	static FText PowerUpName(EZSPowerUp P)
+	{
+		switch (P)
+		{
+		case EZSPowerUp::Overkill:      return NSLOCTEXT("ZS", "PU_Overkill", "OVERKILL");
+		case EZSPowerUp::OneShot:       return NSLOCTEXT("ZS", "PU_OneShot", "ONE SHOT");
+		case EZSPowerUp::ScorchedEarth: return NSLOCTEXT("ZS", "PU_Scorched", "SCORCHED EARTH");
+		case EZSPowerUp::Payday:        return NSLOCTEXT("ZS", "PU_Payday", "PAYDAY");
+		default:                        return FText::GetEmpty();
+		}
+	}
+	static FLinearColor PowerUpColor(EZSPowerUp P)
+	{
+		switch (P)
+		{
+		case EZSPowerUp::Overkill:      return FLinearColor(1.f, 0.15f, 0.1f);
+		case EZSPowerUp::OneShot:       return FLinearColor(0.85f, 0.85f, 1.f);
+		case EZSPowerUp::ScorchedEarth: return FLinearColor(1.f, 0.55f, 0.05f);
+		case EZSPowerUp::Payday:        return FLinearColor(0.3f, 1.f, 0.35f);
+		default:                        return FLinearColor::White;
+		}
+	}
 
 	void AddPopup(const FText& Text, bool bBig = false)
 	{

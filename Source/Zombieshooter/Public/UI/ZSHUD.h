@@ -21,6 +21,9 @@ public:
 	static void Toast(const APawn* Player, const FText& Message);
 	void AddToast(const FText& Message);
 
+	/** Blood splattered on the screen (gore nearby). Amount ~0.3 small .. 1 huge. */
+	static void AddScreenBlood(const APawn* Player, float Amount);
+
 private:
 	void DrawSurvival(const class AZSGameState_Survival* GS, const class AZSPlayerCharacter* Char, float Scale);
 	void DrawInteractPrompt(const AZSPlayerCharacter* Char, float Scale);
@@ -30,6 +33,19 @@ private:
 	void DrawPauseMenu(float Scale);
 	void DrawBunker(class AZSBunkerGameMode* GM, float Scale);
 	void DrawTask(const AZSGameState_Survival* GS, float Scale);
+	void DrawPowerUps(const AZSGameState_Survival* GS, float Scale);
+	void DrawScreenBlood(float DeltaTime);
+
+	struct FBloodBlob
+	{
+		FVector2D Pos;
+		float Radius = 40.f;
+		float Life = 0.f;
+		float MaxLife = 2.f;
+		TArray<float> Shape;   // per-segment radius jitter
+	};
+	TArray<FBloodBlob> BloodBlobs;
+	float LastDrawTime = 0.f;
 	void DrawMissionTracker(float Scale);
 	void DrawCentered(const FString& Text, float Y, class UFont* Font, float TextScale, const FLinearColor& Color);
 

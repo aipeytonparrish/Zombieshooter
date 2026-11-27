@@ -15,7 +15,13 @@ UENUM(BlueprintType)
 enum class EZSZombieType : uint8
 {
 	Walker,
-	Runner
+	Runner,
+	// ---- Specials (Milestone 11) ----
+	Crawler,    // legless, low to the ground, hard to hit
+	Exploder,   // swollen; bursts when shot dead or when it reaches you
+	Spitter,    // lobs acid from range
+	Brute,      // huge, tanky, charges and knocks you back
+	Screamer    // shrieks to enrage nearby zombies
 };
 
 UENUM(BlueprintType)
@@ -110,6 +116,16 @@ public:
 	/** Fires once when this zombie dies. */
 	FZSOnZombieKilled OnKilled;
 
+	static FText TypeName(EZSZombieType Type);
+	bool IsSpecial() const { return ZombieType >= EZSZombieType::Crawler; }
+
+	/** Legs gone: drop to the ground and crawl (uses the mannequin crawl clips through a compatible skeleton). */
+	void BecomeCrawler(bool bHideLegs);
+	/** Exploder burst (also used when one dies). */
+	void Explode();
+	/** Screamer buff: move faster for a while. */
+	void ApplySpeedBuff(float Multiplier, float Duration);
+
 	UFUNCTION(BlueprintPure, Category = "ZS|Zombie")
 	EZSZombieState GetZombieState() const { return State; }
 
@@ -154,6 +170,31 @@ private:
 	void HandleDeath(UZSHealthComponent* InHealth, AController* Killer, AActor* DamageCauser);
 
 	void EnterRagdoll();
+
+	// ---- Specials ----
+	void ApplySpecialLook();
+	void UpdateSpecial(float DeltaSeconds);
+	bool TrySpecialAction(float Dist2D, APawn* Target);
+	void FireSpit();
+	void Scream();
+	bool HasLineOfSight(const APawn* Target) const;
+
+	// ---- Gore ----
+	/** Maps a hit bone to the bone that gets cut (or None). */
+	static FName SeverBoneFor(FName HitBone);
+	void Sever(FName Bone, const FVector& Direction);
+
+	TMap<FName, float> LimbDamage;
+	TSet<FName> Severed;
+	float SpecialCooldown = 0.f;
+	float SpecialTime = -1.f;     // >= 0 while a special action runs
+	bool bSpecialFired = false;
+	bool bExploded = false;
+	bool bCrawling = false;
+	float BuffTime = 0.f;
+	float BuffMultiplier = 1.f;
+	float ChargeTime = 0.f;
+	TWeakObjectPtr<AController> LastInstigator;
 
 	UZSZombieAnimInstance* GetZombieAnim() const;
 

@@ -1,4 +1,5 @@
 #include "Combat/ZSBloodSubsystem.h"
+#include "Combat/ZSGoreSubsystem.h"
 #include "Weapons/ZSWeaponTypes.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/DecalComponent.h"
@@ -68,6 +69,11 @@ void UZSBloodSubsystem::EnsureResources()
 
 void UZSBloodSubsystem::SpawnHitBlood(const FVector& Location, const FVector& Direction, float Intensity)
 {
+	if (!UZSGoreSubsystem::BloodEnabled())
+	{
+		return;
+	}
+	MaxDecals = UZSGoreSubsystem::DismemberEnabled() ? 256 : 48;
 	EnsureResources();
 	UWorld* World = GetWorld();
 	const FVector Dir = Direction.GetSafeNormal();
@@ -99,6 +105,10 @@ void UZSBloodSubsystem::SpawnHitBlood(const FVector& Location, const FVector& Di
 
 void UZSBloodSubsystem::SpawnPool(const FVector& Location)
 {
+	if (!UZSGoreSubsystem::BloodEnabled())
+	{
+		return;
+	}
 	EnsureResources();
 	FHitResult Hit;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(ZSBloodPool), false);

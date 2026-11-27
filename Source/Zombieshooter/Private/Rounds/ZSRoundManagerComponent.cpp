@@ -329,6 +329,29 @@ void UZSRoundManagerComponent::SpawnOne()
 		return;
 	}
 	Z->ZombieType = (bAllowRunners && FMath::FRand() < Tuning.RunnerChance) ? EZSZombieType::Runner : EZSZombieType::Walker;
+	// Specials join from round 4 on (Brutes from round 10, at most 2 alive).
+	if (const AZSGameState_Survival* RoundGS = GetState())
+	{
+		const int32 Round = RoundGS->Round;
+		struct FSpecial { EZSZombieType Type; int32 FromRound; float Chance; };
+		static const FSpecial Specials[] = {
+			{ EZSZombieType::Crawler, 4, 0.06f }, { EZSZombieType::Exploder, 5, 0.05f }, { EZSZombieType::Spitter, 7, 0.05f },
+			{ EZSZombieType::Screamer, 9, 0.03f }, { EZSZombieType::Brute, 10, 0.025f } };
+		float Roll = FMath::FRand();
+		for (const FSpecial& S : Specials)
+		{
+			if (Round < S.FromRound) { continue; }
+			const float Chance = S.Chance * FMath::Min(2.f, 1.f + (Round - S.FromRound) * 0.06f);
+			if (Roll < Chance)
+			{
+				int32 Brutes = 0;
+				for (TActorIterator<AZSZombieBase> It(GetWorld()); It; ++It) { Brutes += (!It->IsDead() && It->ZombieType == EZSZombieType::Brute); }
+				if (S.Type != EZSZombieType::Brute || Brutes < 2) { Z->ZombieType = S.Type; }
+				break;
+			}
+			Roll -= Chance;
+		}
+	}
 	Z->HealthMultiplier = Tuning.HealthMultiplier;
 	Z->SpeedMultiplier = Tuning.SpeedMultiplier;
 	Z->FinishSpawning(T);
@@ -368,7 +391,16 @@ void UZSRoundManagerComponent::HandleZombieKilled(AZSZombieBase* Zombie, AContro
 void UZSRoundManagerComponent::MaybeDropPickup(const FVector& Location)
 {
 	GPickups.RemoveAll([](const TWeakObjectPtr<AZSPickup>& P) { return !P.IsValid(); });
-	if (GPickups.Num() >= MaxPickupsAlive || FMath::FRand() >= PickupDropChance)
+	// Power-ups: rarer, one on the ground at a time.
+	EZSPickupType PowerUp = EZSPickupType::Health;
+	bool bPowerUp = false;
+	if (FMath::FRand() < PowerUpDropChance && !GPickups.ContainsByPredicate([](const TWeakObjectPtr<AZSPickup>& P) { return P->Type >= EZSPickupType::Overkill; }))
+	{
+		const float R = FMath::FRand();
+		PowerUp = R < 0.32f ? EZSPickupType::Overkill : (R < 0.6f ? EZSPickupType::Payday : (R < 0.85f ? EZSPickupType::OneShot : EZSPickupType::ScorchedEarth));
+		bPowerUp = true;
+	}
+	if (!bPowerUp && (GPickups.Num() >= MaxPickupsAlive || FMath::FRand() >= PickupDropChance))
 	{
 		return;
 	}
@@ -382,7 +414,7 @@ void UZSRoundManagerComponent::MaybeDropPickup(const FVector& Location)
 	const FTransform T(FRotator::ZeroRotator, Ground + FVector(0.f, 0.f, 10.f));
 	if (AZSPickup* Pickup = GetWorld()->SpawnActorDeferred<AZSPickup>(AZSPickup::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
 	{
-		Pickup->Type = FMath::FRand() < ArmorDropShare ? EZSPickupType::Armor : EZSPickupType::Health;
+		Pickup->Type = bPowerUp ? PowerUp : (FMath::FRand() < ArmorDropShare ? EZSPickupType::Armor : EZSPickupType::Health);
 		Pickup->FinishSpawning(T);
 		GPickups.Add(Pickup);
 		UE_LOG(LogZS, Log, TEXT("Dropped %s pickup"), Pickup->Type == EZSPickupType::Armor ? TEXT("armor") : TEXT("health"));

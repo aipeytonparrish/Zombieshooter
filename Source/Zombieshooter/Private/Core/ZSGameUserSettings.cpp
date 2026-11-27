@@ -26,6 +26,7 @@ UZSGameUserSettings::UZSGameUserSettings()
 	bAimAssist = true;
 	AimAssistStrength = 1.f;
 	bShowDamageNumbers = true;
+	GoreLevel = 2;
 }
 
 UZSGameUserSettings* UZSGameUserSettings::Get()
@@ -64,6 +65,7 @@ void UZSGameUserSettings::SetToDefaults()
 	bAimAssist = Defaults->bAimAssist;
 	AimAssistStrength = Defaults->AimAssistStrength;
 	bShowDamageNumbers = Defaults->bShowDamageNumbers;
+	GoreLevel = Defaults->GoreLevel;
 	bToggleCrouch = Defaults->bToggleCrouch;
 }
 

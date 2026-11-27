@@ -119,6 +119,12 @@ Wanted: attachment meshes that fit the M4 (TFA) and RD-704: **reflex sight, supp
 extended magazine, light stock**. The RD-704 pack already provides suppressor / brake / grip (used). An attachment
 pack on the same skeleton as the TFA rifle would let the M4 show them too (stats already work).
 
+### Milestone 11 — Gore, specials, power-ups (built with placeholders)
+Wanted: **gib meshes** (flesh chunks, bone shards, severed arm / leg / head pieces), **blood Niagara** (spray, spurt,
+mist), **screen-blood textures**, an **explosion Niagara** for the Bloater, an **acid** Niagara + decal for the Spitter,
+**zombie vocal sounds** for each special (Screamer shriek especially), and **power-up pickup models / icons**.
+Distinct meshes for the Brute (big mutant) and Spitter would help readability (currently tinted / scaled zombies).
+
 ### Later milestones
 City block kit (M14), character creator parts on the Mannequin skeleton (M9), all special
 zombies + gib meshes (M11), boss (M12), music + UI art (M14). Detailed specs get added here as each milestone starts.

@@ -66,6 +66,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "ZS|Health")
 	void AddArmor(float Amount);
 
+	/** Kill outright (no damage numbers / armor). */
+	void Kill(AController* InstigatedBy, AActor* DamageCauser) { HandleAnyDamage(GetOwner(), Health + Armor * 2.f + 1.f, nullptr, InstigatedBy, DamageCauser); }
+
 	/** Restore health (not above max). Returns the amount actually healed. */
 	UFUNCTION(BlueprintCallable, Category = "ZS|Health")
 	float Heal(float Amount);

@@ -11,6 +11,9 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Components/TextRenderComponent.h"
+#include "Rounds/ZSGameMode_Survival.h"
+#include "Rounds/ZSGameState_Survival.h"
 
 AZSPickup::AZSPickup()
 {
@@ -32,12 +35,47 @@ AZSPickup::AZSPickup()
 	Glow->SetIntensity(30.f);
 	Glow->SetAttenuationRadius(220.f);
 	Glow->SetCastShadows(false);
+
+	Label = CreateDefaultSubobject<UTextRenderComponent>(TEXT("Label"));
+	Label->SetupAttachment(Trigger);
+	Label->SetRelativeLocation(FVector(0.f, 0.f, 95.f));
+	Label->SetHorizontalAlignment(EHTA_Center);
+	Label->SetWorldSize(18.f);
+	Label->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Label->SetVisibility(false);
 }
 
 void AZSPickup::BeginPlay()
 {
 	Super::BeginPlay();
 	BaseZ = Mesh->GetRelativeLocation().Z + 40.f;
+
+	if (Type >= EZSPickupType::Overkill)
+	{
+		// Power-up: a glowing orb with its name floating above it.
+		const EZSPowerUp PU = static_cast<EZSPowerUp>(static_cast<int32>(EZSPowerUp::Overkill) + (static_cast<int32>(Type) - static_cast<int32>(EZSPickupType::Overkill)));
+		const FLinearColor C = AZSGameState_Survival::PowerUpColor(PU);
+		Mesh->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere")));
+		Mesh->SetRelativeScale3D(FVector(0.4f));
+		if (UMaterialInterface* GlowMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ZS/Materials/M_ZS_Glow.M_ZS_Glow"), nullptr, LOAD_NoWarn | LOAD_Quiet))
+		{
+			UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(GlowMat, this);
+			MID->SetVectorParameterValue(TEXT("Color"), C);
+			MID->SetScalarParameterValue(TEXT("Opacity"), 0.85f);
+			MID->SetScalarParameterValue(TEXT("Fresnel"), 1.5f);
+			Mesh->SetMaterial(0, MID);
+		}
+		Glow->SetLightColor(C);
+		Glow->SetIntensity(70.f);
+		Glow->SetAttenuationRadius(400.f);
+		Label->SetText(AZSGameState_Survival::PowerUpName(PU));
+		Label->SetTextRenderColor(C.ToFColor(true));
+		Label->SetVisibility(true);
+		Lifetime = 25.f;
+		BaseZ = Mesh->GetRelativeLocation().Z + 50.f;
+		Trigger->OnComponentBeginOverlap.AddDynamic(this, &ThisClass::HandleOverlap);
+		return;
+	}
 
 	const bool bHealth = Type == EZSPickupType::Health;
 	const FLinearColor Color = bHealth ? FLinearColor(0.1f, 0.9f, 0.25f) : FLinearColor(0.15f, 0.45f, 1.f);
@@ -63,6 +101,13 @@ void AZSPickup::Tick(float DeltaSeconds)
 
 	Mesh->SetRelativeLocation(FVector(0.f, 0.f, BaseZ + FMath::Sin(Age * 2.5f) * 6.f));
 	Mesh->AddLocalRotation(FRotator(0.f, 90.f * DeltaSeconds, 0.f));
+	if (Label->IsVisible())
+	{
+		if (const APlayerCameraManager* Cam = UGameplayStatics::GetPlayerCameraManager(this, 0))
+		{
+			Label->SetWorldRotation((Cam->GetCameraLocation() - Label->GetComponentLocation()).GetSafeNormal2D().Rotation());
+		}
+	}
 
 	if (Lifetime > 0.f)
 	{
@@ -104,7 +149,16 @@ bool AZSPickup::TryApply(AActor* Other)
 	}
 
 	FText Message;
-	if (Type == EZSPickupType::Health)
+	if (Type >= EZSPickupType::Overkill)
+	{
+		const EZSPowerUp PU = static_cast<EZSPowerUp>(static_cast<int32>(EZSPowerUp::Overkill) + (static_cast<int32>(Type) - static_cast<int32>(EZSPickupType::Overkill)));
+		if (AZSGameMode_Survival* GM = GetWorld()->GetAuthGameMode<AZSGameMode_Survival>())
+		{
+			GM->ActivatePowerUp(PU);
+		}
+		Message = AZSGameState_Survival::PowerUpName(PU);
+	}
+	else if (Type == EZSPickupType::Health)
 	{
 		if (Health->GetHealth() >= Health->MaxHealth)
 		{

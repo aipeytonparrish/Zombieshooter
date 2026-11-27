@@ -30,7 +30,8 @@ public class Zombieshooter : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"OnlineSubsystem",
-			"OnlineSubsystemUtils"
+			"OnlineSubsystemUtils",
+			"RenderCore"
 		});
 
 		// OnlineSubsystemSteam is enabled as a plugin in Zombieshooter.uproject and configured in

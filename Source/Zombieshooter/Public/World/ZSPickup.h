@@ -8,13 +8,18 @@ class USphereComponent;
 class UStaticMeshComponent;
 class UPointLightComponent;
 class UMaterialInstanceDynamic;
+class UTextRenderComponent;
 
 UENUM(BlueprintType)
 enum class EZSPickupType : uint8
 {
 	Health,
-	Armor
-	// Lethal / tactical refills arrive with grenades; timed power-ups in Milestone 11.
+	Armor,
+	// Power-ups (Milestone 11)
+	Overkill,
+	OneShot,
+	ScorchedEarth,
+	Payday
 };
 
 /**
@@ -52,6 +57,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "ZS|Pickup")
 	TObjectPtr<UPointLightComponent> Glow;
+
+	UPROPERTY(VisibleAnywhere, Category = "ZS|Pickup")
+	TObjectPtr<UTextRenderComponent> Label;
 
 private:
 	UFUNCTION()

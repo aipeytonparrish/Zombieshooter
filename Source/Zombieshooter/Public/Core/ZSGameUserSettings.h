@@ -107,6 +107,10 @@ public:
 	UPROPERTY(config, BlueprintReadOnly, Category = "ZS|HUD")
 	bool bShowDamageNumbers;
 
+	/** 0 = off (no blood), 1 = reduced (blood, no dismemberment), 2 = full. */
+	UPROPERTY(config, BlueprintReadOnly, Category = "ZS|Gore")
+	int32 GoreLevel;
+
 	// ---- Setters (clamped) -----------------------------------------------------------------
 
 	UFUNCTION(BlueprintCallable, Category = "ZS|Settings")

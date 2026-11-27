@@ -21,6 +21,7 @@
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
 #include "Bunker/ZSBunkerMenus.h"
+#include "Engine/DamageEvents.h"
 #include "Rounds/ZSRunTaskComponent.h"
 #include "Zombieshooter.h"
 
@@ -245,6 +246,27 @@ void AZSPlayerController::StartAutoShotIfRequested()
 		FTimerHandle TPTimer;
 		GetWorldTimerManager().SetTimer(TPTimer, FTimerDelegate::CreateWeakLambda(this, [this]() { ZSThirdPerson(); }), 1.0f, false);
 	}
+	// -ZSAutoHurt="bone,damage;bone,damage" one entry per second from 3 s (gore tests).
+	FString AutoHurt;
+	if (FParse::Value(Cmd, TEXT("ZSAutoHurt="), AutoHurt, false))
+	{
+		TArray<FString> Hits;
+		AutoHurt.ParseIntoArray(Hits, TEXT(";"));
+		for (int32 i = 0; i < Hits.Num(); ++i)
+		{
+			FString B, D;
+			if (!Hits[i].Split(TEXT(","), &B, &D)) { continue; }
+			const float Dmg = FCString::Atof(*D);
+			FTimerHandle HurtTimer;
+			GetWorldTimerManager().SetTimer(HurtTimer, FTimerDelegate::CreateWeakLambda(this, [this, B, Dmg]() { ZSHurtBone(B, Dmg); }), 3.f + i, false);
+		}
+	}
+	int32 AutoPowerUp = 0;
+	if (FParse::Value(Cmd, TEXT("ZSAutoPowerUp="), AutoPowerUp))
+	{
+		FTimerHandle PUTimer;
+		GetWorldTimerManager().SetTimer(PUTimer, FTimerDelegate::CreateWeakLambda(this, [this, AutoPowerUp]() { ZSPowerUp(AutoPowerUp); }), 2.5f, false);
+	}
 	int32 AutoTask = 0;
 	if (FParse::Value(Cmd, TEXT("ZSAutoTask="), AutoTask))
 	{
@@ -392,7 +414,10 @@ void AZSPlayerController::ZSZombies(int32 Count, int32 Type, float SpreadDegrees
 		const FTransform T(FRotator(0.f, Yaw + 180.f, 0.f), Loc);
 		if (AZSZombieBase* Z = World->SpawnActorDeferred<AZSZombieBase>(AZSZombieBase::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn))
 		{
+			// 0 walker, 1 runner, 2 mix, 3 crawler, 4 bloater, 5 spitter, 6 brute, 7 screamer, 8 all specials mixed
 			Z->ZombieType = Type == 0 ? EZSZombieType::Walker : (Type == 1 ? EZSZombieType::Runner : (FMath::FRand() < 0.35f ? EZSZombieType::Runner : EZSZombieType::Walker));
+			if (Type >= 3 && Type <= 7) { Z->ZombieType = static_cast<EZSZombieType>(static_cast<int32>(EZSZombieType::Crawler) + Type - 3); }
+			if (Type == 8) { Z->ZombieType = static_cast<EZSZombieType>(static_cast<int32>(EZSZombieType::Crawler) + i % 5); }
 			Z->FinishSpawning(T);
 			++Spawned;
 		}
@@ -702,5 +727,40 @@ void AZSPlayerController::ZSTask(int32 Type)
 	if (AZSGameMode_Survival* GM = GetWorld()->GetAuthGameMode<AZSGameMode_Survival>())
 	{
 		GM->GetTasks()->StartTask(static_cast<EZSRunTaskType>(FMath::Clamp(Type, 1, 3)));
+	}
+}
+
+void AZSPlayerController::ZSGore(int32 Level)
+{
+	if (UZSGameUserSettings* S = UZSGameUserSettings::Get())
+	{
+		S->GoreLevel = FMath::Clamp(Level, 0, 2);
+		S->SaveSettings();
+		UE_LOG(LogZS, Warning, TEXT("Gore level %d (0 off, 1 reduced, 2 full)."), S->GoreLevel);
+	}
+}
+
+void AZSPlayerController::ZSPowerUp(int32 Type)
+{
+	if (AZSGameMode_Survival* GM = GetWorld()->GetAuthGameMode<AZSGameMode_Survival>())
+	{
+		GM->ActivatePowerUp(static_cast<EZSPowerUp>(FMath::Clamp(Type, 1, 4)));
+	}
+}
+
+void AZSPlayerController::ZSHurtBone(const FString& Bone, float Damage)
+{
+	for (TActorIterator<AZSZombieBase> It(GetWorld()); It; ++It)
+	{
+		if (It->IsDead())
+		{
+			continue;
+		}
+		FPointDamageEvent Ev;
+		Ev.Damage = Damage;
+		Ev.HitInfo.BoneName = FName(*Bone);
+		Ev.HitInfo.ImpactPoint = It->GetMesh()->GetSocketLocation(Ev.HitInfo.BoneName);
+		Ev.ShotDirection = (Ev.HitInfo.ImpactPoint - PlayerCameraManager->GetCameraLocation()).GetSafeNormal();
+		It->TakeDamage(Damage, Ev, this, GetPawn());
 	}
 }

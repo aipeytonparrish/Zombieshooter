@@ -13,6 +13,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "Core/ZSLevelCatalog.h"
 #include "Misc/PackageName.h"
+#include "EngineUtils.h"
+#include "Combat/ZSHealthComponent.h"
 #include "Zombieshooter.h"
 
 AZSGameMode_Survival::AZSGameMode_Survival()
@@ -78,6 +80,11 @@ void AZSGameMode_Survival::AddReward(int32 XP, int32 Cash, const FText& Label, b
 	{
 		return;
 	}
+	if (GS->IsPowerUpActive(EZSPowerUp::Payday))
+	{
+		XP *= 2;
+		Cash *= 2;
+	}
 	GS->RunXP += XP;
 	GS->RunCash += Cash;
 	const FText Line = Label.IsEmpty()
@@ -93,6 +100,8 @@ void AZSGameMode_Survival::RewardKill(AZSZombieBase* Zombie, bool bHeadshot)
 	LastKillTime = Now;
 
 	const bool bRunner = Zombie && Zombie->ZombieType == EZSZombieType::Runner;
+	const bool bSpecial = Zombie && Zombie->IsSpecial();
+	const bool bBrute = Zombie && Zombie->ZombieType == EZSZombieType::Brute;
 	if (UZSMissionSubsystem* Missions = UZSMissionSubsystem::Get(this))
 	{
 		Missions->Record(EZSMissionStat::Kills);
@@ -101,15 +110,20 @@ void AZSGameMode_Survival::RewardKill(AZSZombieBase* Zombie, bool bHeadshot)
 		if (KillStreak >= 2) { Missions->Record(EZSMissionStat::MultiKills); }
 	}
 	Tasks->OnZombieKilled();
-	int32 XP = KillXP + (bRunner ? RunnerBonus : 0) + (bHeadshot ? HeadshotBonus : 0);
-	const int32 Cash = KillCash + (bRunner ? RunnerBonus : 0) + (bHeadshot ? HeadshotBonus : 0);
+	const int32 SpecialBonus = bBrute ? 150 : (bSpecial ? 20 : 0);
+	int32 XP = KillXP + (bRunner ? RunnerBonus : 0) + (bHeadshot ? HeadshotBonus : 0) + SpecialBonus;
+	const int32 Cash = KillCash + (bRunner ? RunnerBonus : 0) + (bHeadshot ? HeadshotBonus : 0) + SpecialBonus;
 	FText Label;
-	if (KillStreak >= 2)
+	if (bSpecial)
+	{
+		Label = FText::Format(NSLOCTEXT("ZS", "SpecialKilled", "{0} KILLED"), AZSZombieBase::TypeName(Zombie->ZombieType));
+	}
+	if (!bSpecial && KillStreak >= 2)
 	{
 		XP += MultiKillXP * (KillStreak - 1);
 		Label = KillStreak == 2 ? NSLOCTEXT("ZS", "DoubleKill", "DOUBLE KILL") : FText::Format(NSLOCTEXT("ZS", "MultiKill", "{0}x MULTI KILL"), FText::AsNumber(KillStreak));
 	}
-	else if (bHeadshot)
+	else if (!bSpecial && bHeadshot)
 	{
 		Label = NSLOCTEXT("ZS", "Headshot", "HEADSHOT");
 	}
@@ -221,4 +235,44 @@ void AZSGameMode_Survival::RestartRun()
 		return;
 	}
 	GetWorld()->ServerTravel(TEXT("?Restart"), false);
+}
+
+void AZSGameMode_Survival::ActivatePowerUp(EZSPowerUp PowerUp)
+{
+	AZSGameState_Survival* GS = GetGameState<AZSGameState_Survival>();
+	if (!GS || bRunEnded)
+	{
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	float Duration = 0.f;
+	switch (PowerUp)
+	{
+	case EZSPowerUp::Overkill: Duration = 20.f; break;
+	case EZSPowerUp::OneShot:  Duration = 15.f; break;
+	case EZSPowerUp::Payday:   Duration = 30.f; break;
+	case EZSPowerUp::ScorchedEarth:
+	{
+		// Everything on the map dies, credited to the player (normal kill rewards apply).
+		APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+		int32 Killed = 0;
+		for (TActorIterator<AZSZombieBase> It(GetWorld()); It; ++It)
+		{
+			if (!It->IsDead())
+			{
+				It->GetHealth()->Kill(PC, PC ? PC->GetPawn() : nullptr);
+				++Killed;
+			}
+		}
+		UE_LOG(LogZS, Log, TEXT("Scorched Earth killed %d zombies."), Killed);
+		break;
+	}
+	default: break;
+	}
+	GS->PowerUpEnd[(int32)PowerUp] = Now + Duration;
+	GS->PowerUpDuration[(int32)PowerUp] = Duration;
+	GS->AddPopup(AZSGameState_Survival::PowerUpName(PowerUp), true);
+	GS->Notice = FText::GetEmpty();
+	GS->PowerUpFlash = AZSGameState_Survival::PowerUpName(PowerUp);
+	GS->PowerUpFlashTime = Now;
 }

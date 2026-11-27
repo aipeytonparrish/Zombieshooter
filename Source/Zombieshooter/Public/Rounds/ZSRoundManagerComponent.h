@@ -61,6 +61,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "ZS|Pickups")
 	float PickupDropChance = 0.07f;
 
+	/** Chance per kill of a power-up (Overkill, One Shot, Payday, Scorched Earth). */
+	UPROPERTY(EditAnywhere, Category = "ZS|Rounds")
+	float PowerUpDropChance = 0.022f;
+
 	UPROPERTY(EditAnywhere, Category = "ZS|Pickups")
 	float ArmorDropShare = 0.5f;
 

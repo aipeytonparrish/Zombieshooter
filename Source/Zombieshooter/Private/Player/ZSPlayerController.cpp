@@ -1,4 +1,6 @@
 #include "Player/ZSPlayerController.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 #include "Input/ZSInputSet.h"
 #include "Core/ZSGameUserSettings.h"
 #include "EnhancedInputSubsystems.h"
@@ -702,6 +704,33 @@ void AZSPlayerController::ZSResetProfile()
 void AZSPlayerController::ZSGiveCash(int32 Amount)
 {
 	if (UZSProfileSubsystem* P = UZSProfileSubsystem::Get(this)) { P->GiveCash(Amount); ZSProfile(); }
+}
+
+void AZSPlayerController::ZSHeightMap(int32 X0, int32 X1, int32 Y0, int32 Y1, int32 Step)
+{
+	Step = FMath::Max(Step, 50);
+	FString Out = FString::Printf(TEXT("x %d..%d y %d..%d step %d  (floor z in dm; '.' = no hit; '~' = water/below -300)\n"), X0, X1, Y0, Y1, Step);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(ZSHeightMap), true, GetPawn());
+	for (int32 Y = Y0; Y <= Y1; Y += Step)
+	{
+		Out += FString::Printf(TEXT("%6d "), Y);
+		for (int32 X = X0; X <= X1; X += Step)
+		{
+			FHitResult Hit;
+			if (GetWorld()->LineTraceSingleByChannel(Hit, FVector(X, Y, 20000.f), FVector(X, Y, -5000.f), ECC_Visibility, Params))
+			{
+				Out += Hit.ImpactPoint.Z < -300.f ? TEXT("    ~") : FString::Printf(TEXT("%5d"), FMath::RoundToInt(Hit.ImpactPoint.Z / 10.f));
+			}
+			else
+			{
+				Out += TEXT("    .");
+			}
+		}
+		Out += TEXT("\n");
+	}
+	const FString Path = FPaths::ProjectSavedDir() / TEXT("ZSHeightMap.txt");
+	FFileHelper::SaveStringToFile(Out, *Path);
+	UE_LOG(LogZS, Warning, TEXT("Height map written to %s"), *Path);
 }
 
 void AZSPlayerController::ZSPrestige(int32 Rank)

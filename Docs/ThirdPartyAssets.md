@@ -114,3 +114,16 @@ demo assets are opened in the editor. Nothing in our code references them; plugi
 ## Bunker environment (Milestone 7 art pass)
 `Content/Bunker/` — from `Desktop/Enviorments Assets/Bunker.rar` (Fab "Bunker" pack, UE 4.25). Restore by extracting
 `Bunker/Content/Bunker` from the archive into `Content/`. Used by `L_Bunker` (streams `/Game/Bunker/Maps/Demo`).
+
+## New York level (owner's "post-apocalyptic abandoned city New York" scene)
+Source: `post-apocalyptic-abandoned-city-new-york.zip` (Desktop / Downloads): a Blender render scene
+(`Post-apocalyptic_NY.blend`, 1,350 objects, 9.3M polys) plus `textures.rar`. Pipeline (all scripted, re-runnable):
+1. Extract the zip and the textures rar into `Desktop/Enviorments Assets/_extract/PostApocNY/`.
+2. `blender -b --disable-autoexec Post-apocalyptic_NY.blend --python Tools/Import/blender_export_postapoc_ny.py -- <textures> <export dir>`:
+   relinks textures, drops the sky dome / grass particles / camera, decimates the 312k-tri debris piles, merges
+   everything into ~70 meshes (per collection and 25 m cell), exports glTF.
+3. `Tools/Import/import_postapoc_ny.py` imports it (Nanite, complex collision) into `Content/NYC_PostApoc/`
+   (git-ignored) and places it in `/Game/NYC_PostApoc/Maps/L_NYC_Art`.
+4. `Tools/Import/create_nyc_map.py` builds our `L_NYC` (weather, gameplay actors) which streams the art level.
+10 small Textures.com maps referenced by the .blend were not in the archive (a marble floor, a worn wall); those
+surfaces import without them.

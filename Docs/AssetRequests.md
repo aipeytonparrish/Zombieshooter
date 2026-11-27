@@ -130,6 +130,12 @@ Wanted: a **giant mutant boss mesh** (Mannequin-compatible skeleton is ideal, so
 animations for: idle, walk, run/charge, two swipes, ground slam (windup + impact), throw, roar, stagger/stunned loop,
 death. Plus **boss music**, roar / slam / footstep sounds, a slam shockwave Niagara and a camera shake.
 
+### New York level (built from the owner's post-apocalyptic NY scene)
+Rain is our own (instanced streaks + `M_ZS_Rain`). Wanted to finish the mood: **rain ambience loop** (street, with
+distant thunder), **rain splash** Niagara / ripple decal for puddles, a **wet-surface** material function or puddle
+decals, and the 10 missing Textures.com maps from the .blend (`TexturesCom_Marble_FanPattern_1K_*`,
+`TexturesCom_Concrete_WornWall_512_*`, `TexturesCom_Pavement_ExposedAggregate_1K_*`) if you still have them.
+
 ### Later milestones
 City block kit (M14), character creator parts on the Mannequin skeleton (M9), all special
 zombies + gib meshes (M11), boss (M12), music + UI art (M14). Detailed specs get added here as each milestone starts.

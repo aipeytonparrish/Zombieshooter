@@ -1,0 +1,96 @@
+#include "World/ZSRain.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Kismet/GameplayStatics.h"
+#include "Camera/PlayerCameraManager.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "UObject/ConstructorHelpers.h"
+
+AZSRain::AZSRain()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.TickGroup = TG_PostUpdateWork;
+
+	Drops = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Drops"));
+	RootComponent = Drops;
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Plane(TEXT("/Engine/BasicShapes/Plane.Plane"));
+	Drops->SetStaticMesh(Plane.Object);
+	Drops->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Drops->SetCastShadow(false);
+	Drops->SetMobility(EComponentMobility::Movable);
+	Drops->bReceivesDecals = false;
+	Drops->SetGenerateOverlapEvents(false);
+	Drops->bAffectDistanceFieldLighting = false;
+	Drops->SetCanEverAffectNavigation(false);
+}
+
+void AZSRain::BeginPlay()
+{
+	Super::BeginPlay();
+	UMaterialInterface* Mat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ZS/Materials/M_ZS_Rain.M_ZS_Rain"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	if (!Mat)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AZSRain: M_ZS_Rain missing (run Tools/Import/create_fx_materials.py)."));
+		SetActorHiddenInGame(true);
+		SetActorTickEnabled(false);
+		return;
+	}
+	UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Mat, this);
+	MID->SetVectorParameterValue(TEXT("Color"), Color);
+	MID->SetScalarParameterValue(TEXT("Opacity"), Opacity);
+	// The fall is simulated here; switch the material's GPU fall off.
+	MID->SetScalarParameterValue(TEXT("Speed"), 0.f);
+	MID->SetScalarParameterValue(TEXT("Height"), 0.f);
+	MID->SetScalarParameterValue(TEXT("Wind"), 0.f);
+	Drops->SetMaterial(0, MID);
+
+	// Drops live in world space inside a box around the camera and wrap around it as it moves.
+	FRandomStream Rand(1337);
+	const FVector Center = GetActorLocation();
+	Positions.SetNum(DropCount);
+	Yaws.SetNum(DropCount);
+	TArray<FTransform> Xforms;
+	Xforms.Reserve(DropCount);
+	for (int32 i = 0; i < DropCount; ++i)
+	{
+		Positions[i] = Center + FVector(Rand.FRandRange(-BoxExtent.X, BoxExtent.X), Rand.FRandRange(-BoxExtent.Y, BoxExtent.Y), Rand.FRandRange(-BoxExtent.Z, BoxExtent.Z));
+		Yaws[i] = Rand.FRandRange(0.f, 180.f);
+		Xforms.Add(DropTransform(i));
+	}
+	Drops->AddInstances(Xforms, false, true, false);
+	Drops->SetBoundsScale(2.f);
+}
+
+FTransform AZSRain::DropTransform(int32 i) const
+{
+	// Engine plane is 100x100 in XY facing +Z: pitch it upright (local X vertical), lean it with the wind.
+	const float Lean = FMath::RadiansToDegrees(FMath::Atan(Wind));
+	return FTransform(FRotator(90.f - Lean, Yaws[i], 0.f), Positions[i], FVector(StreakSize.X / 100.f, StreakSize.Y / 100.f, 1.f));
+}
+
+void AZSRain::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	const APlayerCameraManager* Cam = UGameplayStatics::GetPlayerCameraManager(this, 0);
+	if (!Cam || Positions.Num() == 0)
+	{
+		return;
+	}
+	const FVector C = Cam->GetCameraLocation();
+	SetActorLocation(C);   // keeps the component bounds around the camera
+
+	const FVector Step(FallSpeed * Wind * DeltaSeconds, 0.f, -FallSpeed * DeltaSeconds);
+	auto Wrap = [](double V, double Mid, double Ext) { const double D = V - Mid; return D > Ext ? V - 2.0 * Ext : (D < -Ext ? V + 2.0 * Ext : V); };
+	TArray<FTransform> Xforms;
+	Xforms.SetNum(Positions.Num());
+	for (int32 i = 0; i < Positions.Num(); ++i)
+	{
+		FVector& P = Positions[i];
+		P += Step;
+		P.X = Wrap(P.X, C.X, BoxExtent.X);
+		P.Y = Wrap(P.Y, C.Y, BoxExtent.Y);
+		P.Z = Wrap(P.Z, C.Z, BoxExtent.Z);
+		Xforms[i] = DropTransform(i);
+	}
+	Drops->BatchUpdateInstancesTransforms(0, Xforms, true, true, true);
+}

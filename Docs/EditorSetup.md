@@ -522,3 +522,23 @@ The bunker panel shows "PRESTIGE READY - MISSION BOARD" at level 55. Selecting P
 rewards; confirm on the second page.
 
 Console: `ZSGiveXP 2000000` (to level 55), `ZSPrestige` (prestige now), `ZSPrestige 7` (set the rank directly).
+
+## New York level — Riverside Ruins (from your post-apocalyptic NY scene)
+
+Map table → **New York - Riverside Ruins** (level 1). A ruined street by the river on a grey, rainy afternoon:
+brownstones, rusted cars, debris piles, dead trees and street lamps along the riverbank, a foggy skyline of
+broken towers. Play area ~42 × 120 m along the street (invisible walls at the river and the far facades),
+14 zombie spawn points around the edges, 3 ammo crates (north end near the start, middle by the river, south).
+
+Weather (all in `L_NYC`, rebuild with `Tools/Import/create_nyc_map.py`):
+- **Clouds:** storm-coverage volumetric clouds (`MI_ZS_OvercastClouds`), weak soft sun, real-time sky light.
+- **Fog:** light height fog with volumetric fog, cool grey grade, slight negative exposure.
+- **Rain:** `AZSRain` (our C++ actor): 4,000 streaks simulated around the camera in world space. Tune it on the
+  `ZSRain` actor (count, box size, speed, streak size, opacity, colour, wind).
+
+Rebuilding the art (only needed on a new PC or after changing the scene) is in `Docs/ThirdPartyAssets.md`
+("New York level"). Layout helper: console `ZSHeightMap -7000 5000 -9000 9000 250` writes a floor-height grid to
+`Saved/ZSHeightMap.txt` (used to place the play area, spawns and crates).
+
+Known: the art was a render scene, so a few backdrop towers right behind the east facades are low-poly up close,
+and the river surface is solid (the walls keep you off it).

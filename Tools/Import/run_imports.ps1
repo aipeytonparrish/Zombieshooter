@@ -30,3 +30,16 @@ Write-Host "== create_bunker_map.py"
 & $Editor $Project -run=pythonscript "-script=$(Join-Path $PSScriptRoot 'create_bunker_map.py')" -unattended -nullrhi -nosplash -stdout |
     Select-String -Pattern "\[ZSImport\]|Traceback|Exception" |
     ForEach-Object { $_.Line -replace '^\[[^\]]*\]\[[^\]]*\]', '' }
+
+# FX materials (glow, rain) and the New York level (ours, versioned; its art is imported separately, see
+# Docs/ThirdPartyAssets.md "New York level": blender_export_postapoc_ny.py then import_postapoc_ny.py).
+foreach ($s in @("create_fx_materials.py", "create_nyc_map.py")) {
+    if ($s -eq "create_nyc_map.py") {
+        $nyc = Join-Path $PSScriptRoot "..\..\Content\ZS\Maps\L_NYC.umap"
+        if (Test-Path $nyc) { Remove-Item $nyc -Force }
+    }
+    Write-Host "== $s"
+    & $Editor $Project -run=pythonscript "-script=$(Join-Path $PSScriptRoot $s)" -unattended -nullrhi -nosplash -stdout |
+        Select-String -Pattern "\[ZSImport\]|Traceback|Exception" |
+        ForEach-Object { $_.Line -replace '^\[[^\]]*\]\[[^\]]*\]', '' }
+}

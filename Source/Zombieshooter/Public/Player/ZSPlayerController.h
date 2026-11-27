@@ -126,6 +126,10 @@ public:
 	UFUNCTION(Exec)
 	void ZSPrestige(int32 Rank = -1);
 
+	/** ZSHeightMap X0 X1 Y0 Y1 Step -> traces a floor-height grid and writes Saved/ZSHeightMap.txt (level layout work). */
+	UFUNCTION(Exec)
+	void ZSHeightMap(int32 X0, int32 X1, int32 Y0, int32 Y1, int32 Step = 250);
+
 	/** ZSWinRun -> survival: end the run as a win now (testing). */
 	UFUNCTION(Exec)
 	void ZSWinRun();

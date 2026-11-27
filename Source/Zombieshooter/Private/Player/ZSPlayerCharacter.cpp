@@ -414,7 +414,8 @@ void AZSPlayerCharacter::Input_LookGamepad(const FInputActionValue& Value)
 	const FVector2D Direction = Stick / Magnitude;
 	const float Curved = FMath::Pow(Magnitude, Settings->GamepadResponseExponent);
 	const float Sensitivity = Settings->GamepadLookSensitivity * (WeaponComponent ? WeaponComponent->GetLookInputScale(true) : 1.f);
-	const float InvertY = Settings->bInvertGamepadY ? -1.f : 1.f;
+	// The owner's controller reports stick-up as -Y, so the non-inverted default flips it (push up = look up).
+	const float InvertY = Settings->bInvertGamepadY ? 1.f : -1.f;
 
 	float YawRate = Direction.X * Curved * GamepadYawRate * Sensitivity;
 	const float PitchRate = Direction.Y * Curved * GamepadPitchRate * Sensitivity * InvertY;

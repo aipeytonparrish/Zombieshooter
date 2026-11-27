@@ -126,6 +126,10 @@ public:
 	UFUNCTION(Exec)
 	void ZSWinRun();
 
+	/** Logs distances to walls in 16 directions and the floor height around the player (level layout work). */
+	UFUNCTION(Exec)
+	void ZSProbe();
+
 	/** Over-the-shoulder camera experiment (Milestone 9). */
 	UFUNCTION(Exec)
 	void ZSThirdPerson();

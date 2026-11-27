@@ -64,7 +64,8 @@ restored (see the bottom of this file) before maps that use them will look right
 ## 4b. Generated assets (`Content/ZS_Imported/`, git-ignored)
 
 Some packs are FBX-only, so scripts in `Tools/Import/` convert them into Unreal assets headlessly (no clicking):
-`powershell -ExecutionPolicy Bypass -File ToolsImportun_imports.ps1` (editor closed). Currently: the RD-704 rifle
+`powershell -ExecutionPolicy Bypass -File ToolsImport
+un_imports.ps1` (editor closed). Currently: the RD-704 rifle
 (`import_rd704.py` - static-mesh parts, PBR materials on `M_ZS_PBR_Master`, glowing Bravo4 reticle). Code references
 these paths and falls back to placeholders when they're missing.
 
@@ -109,3 +110,7 @@ blood decal), **no UI hit-marker / kill-confirm sound**, and only one SMG mesh (
 
 Note: packs that need plugins we haven't enabled (Chooser, PoseSearch, GameplayCameras, …) will log warnings if their
 demo assets are opened in the editor. Nothing in our code references them; plugins get enabled when a pack is put to use.
+
+## Bunker environment (Milestone 7 art pass)
+`Content/Bunker/` — from `Desktop/Enviorments Assets/Bunker.rar` (Fab "Bunker" pack, UE 4.25). Restore by extracting
+`Bunker/Content/Bunker` from the archive into `Content/`. Used by `L_Bunker` (streams `/Game/Bunker/Maps/Demo`).

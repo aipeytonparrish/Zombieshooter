@@ -218,6 +218,27 @@ void AZSPlayerController::StartAutoShotIfRequested()
 			GetWorldTimerManager().SetTimer(TeleportTimer, FTimerDelegate::CreateWeakLambda(this, [this, Where]() { if (APawn* P = GetPawn()) { const bool bOk = P->TeleportTo(Where, P->GetActorRotation()); UE_LOG(LogZS, Warning, TEXT("Teleport %s -> %s"), bOk ? TEXT("ok") : TEXT("FAILED"), *P->GetActorLocation().ToCompactString()); } }), 0.7f, false);
 		}
 	}
+	// -ZSAutoProbe="x,y,z;x,y,z": teleport to each point and log ZSProbe.
+	FString ProbePts;
+	if (FParse::Value(Cmd, TEXT("ZSAutoProbe="), ProbePts, false))
+	{
+		TArray<FString> Pts;
+		ProbePts.ParseIntoArray(Pts, TEXT(";"));
+		for (int32 i = 0; i < Pts.Num(); ++i)
+		{
+			TArray<FString> C;
+			Pts[i].ParseIntoArray(C, TEXT(","));
+			if (C.Num() != 3) { continue; }
+			const FVector Loc(FCString::Atof(*C[0]), FCString::Atof(*C[1]), FCString::Atof(*C[2]));
+			FTimerHandle H;
+			GetWorldTimerManager().SetTimer(H, FTimerDelegate::CreateWeakLambda(this, [this, Loc]()
+			{
+				if (APawn* Me = GetPawn()) { Me->TeleportTo(Loc, Me->GetActorRotation()); }
+				FTimerHandle H2;
+				GetWorldTimerManager().SetTimer(H2, FTimerDelegate::CreateWeakLambda(this, [this]() { ZSProbe(); }), 0.3f, false);
+			}), 1.5f + i * 0.6f, false);
+		}
+	}
 	if (FParse::Param(Cmd, TEXT("ZSAutoThirdPerson")))
 	{
 		FTimerHandle TPTimer;
@@ -645,4 +666,26 @@ void AZSPlayerController::ZSThirdPerson()
 	{
 		Char->SetThirdPerson(!Char->IsThirdPerson());
 	}
+}
+
+void AZSPlayerController::ZSProbe()
+{
+	const APawn* P = GetPawn();
+	if (!P)
+	{
+		return;
+	}
+	FCollisionQueryParams Params(TEXT("ZSProbe"), false, P);
+	const FVector Eye = P->GetActorLocation() + FVector(0.f, 0.f, 40.f);
+	FHitResult Hit;
+	const float FloorZ = GetWorld()->LineTraceSingleByChannel(Hit, Eye, Eye - FVector(0, 0, 1000), ECC_Visibility, Params) ? Hit.ImpactPoint.Z : -1.f;
+	const float CeilZ = GetWorld()->LineTraceSingleByChannel(Hit, Eye, Eye + FVector(0, 0, 2000), ECC_Visibility, Params) ? Hit.ImpactPoint.Z : -1.f;
+	FString Dirs;
+	for (int32 i = 0; i < 16; ++i)
+	{
+		const FVector Dir = FRotator(0.f, i * 22.5f, 0.f).Vector();
+		const float D = GetWorld()->LineTraceSingleByChannel(Hit, Eye, Eye + Dir * 5000.f, ECC_Visibility, Params) ? Hit.Distance : 5000.f;
+		Dirs += FString::Printf(TEXT(" %.0f:%.0f"), i * 22.5f, D);
+	}
+	UE_LOG(LogZS, Warning, TEXT("ZSProbe at %s floor %.0f ceiling %.0f |%s"), *P->GetActorLocation().ToString(), FloorZ, CeilZ, *Dirs);
 }

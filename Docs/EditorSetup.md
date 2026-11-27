@@ -407,3 +407,14 @@ chosen gloves and tint, and the survivor body casts your shadow.
 
 **Over-the-shoulder camera (experiment):** type `ZSThirdPerson` in the console to toggle a third-person view of your
 survivor (idle / run animations only, no aiming poses yet). First person stays the real game camera.
+
+### Bunker art (Bunker Fab pack)
+The bunker now uses the **Bunker** pack you supplied (`Content/Bunker`, UE 4.25 content, gitignored like the other
+packs — the backup is `Desktop/Enviorments Assets/Bunker.rar`). `create_bunker_map.py` streams the pack's
+`/Game/Bunker/Maps/Demo` level into `L_Bunker` (always loaded) and places the five stations along its main pipe
+corridor; you spawn at the pack's own start. Without the pack the script falls back to the code-built placeholder
+room. **Never save the Demo map itself** — L_Bunker only references it.
+
+The other archives in that folder: Shelter (split .rar, UE content), Underground_Tunnel (UE), V2Bunker 4.26 (UE),
+cold-war-underground-bunker (UE 5.0) are good candidates for later levels; Bunker_pack is a Unity package and the
+.blend files need a Blender export before Unreal can use them.

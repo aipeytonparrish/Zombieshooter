@@ -34,6 +34,7 @@ private:
 	void DrawBunker(class AZSBunkerGameMode* GM, float Scale);
 	void DrawTask(const AZSGameState_Survival* GS, float Scale);
 	void DrawPowerUps(const AZSGameState_Survival* GS, float Scale);
+	void DrawBoss(const AZSGameState_Survival* GS, float Scale);
 	void DrawScreenBlood(float DeltaTime);
 
 	struct FBloodBlob

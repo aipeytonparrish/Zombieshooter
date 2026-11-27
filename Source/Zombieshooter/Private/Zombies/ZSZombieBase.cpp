@@ -279,6 +279,9 @@ void AZSZombieBase::ApplyTypeDefaults()
 		Health->MaxHealth = 100.f * HealthMultiplier;
 		SpecialCooldown = 3.f;
 		break;
+	case EZSZombieType::Boss:
+		ApplyBossDefaults();
+		break;
 	default:
 		break;
 	}
@@ -311,6 +314,14 @@ void AZSZombieBase::Tick(float DeltaSeconds)
 
 	StateTime += DeltaSeconds;
 	FlinchTimer = FMath::Max(0.f, FlinchTimer - DeltaSeconds);
+	if (IsBoss())
+	{
+		UpdateBoss(DeltaSeconds);
+		if (BossAction != EZSBossAction::None)
+		{
+			return;
+		}
+	}
 	UpdateSpecial(DeltaSeconds);
 	if (SpecialTime >= 0.f)
 	{
@@ -442,7 +453,7 @@ void AZSZombieBase::StartAttack()
 
 	AttackIndex = AttackAnims.Num() > 0 ? FMath::RandRange(0, AttackAnims.Num() - 1) : INDEX_NONE;
 	AttackHitFraction = Appearance.AttackHitFractions.IsValidIndex(AttackIndex) ? Appearance.AttackHitFractions[AttackIndex] : 0.45f;
-	const float Rate = ZombieType == EZSZombieType::Runner ? 1.3f : (ZombieType == EZSZombieType::Brute ? 0.85f : 1.05f);
+	const float Rate = ZombieType == EZSZombieType::Runner ? 1.3f : ((ZombieType == EZSZombieType::Brute || IsBoss()) ? 0.8f : 1.05f);
 	const float Duration = (AttackIndex != INDEX_NONE && GetZombieAnim())
 		? GetZombieAnim()->PlayAction(AttackAnims[AttackIndex], Rate, 0.12f, 0.2f)
 		: 1.2f;
@@ -467,7 +478,7 @@ void AZSZombieBase::UpdateAttack(float DeltaSeconds)
 			if (ToTarget.Size2D() <= AttackRange + AttackReachBonus && FMath::Abs(ToTarget.Z) < 140.f && Angle < 70.f)
 			{
 				UGameplayStatics::ApplyDamage(Target, AttackDamage, GetController(), this, UDamageType::StaticClass());
-				if (ZombieType == EZSZombieType::Brute)
+				if (ZombieType == EZSZombieType::Brute || IsBoss())
 				{
 					if (ACharacter* Char = Cast<ACharacter>(Target))
 					{
@@ -519,6 +530,16 @@ float AZSZombieBase::TakeDamage(float DamageAmount, const FDamageEvent& DamageEv
 			else if (GS->IsPowerUpActive(EZSPowerUp::Overkill)) { DamageAmount *= 2.f; }
 		}
 	}
+	if (IsBoss())
+	{
+		// One Shot never one-shots the boss; weak points matter.
+		DamageAmount = FMath::Min(DamageAmount, 400.f);
+		if (DamageEvent.IsOfType(FPointDamageEvent::ClassID))
+		{
+			DamageAmount *= BossDamageScale(static_cast<const FPointDamageEvent&>(DamageEvent).HitInfo.BoneName);
+		}
+		if (BossAction == EZSBossAction::Roar && BossActionTime < 2.f) { DamageAmount *= 0.1f; }   // armoured while roaring
+	}
 	if (DamageEvent.IsOfType(FPointDamageEvent::ClassID))
 	{
 		const FPointDamageEvent& Point = static_cast<const FPointDamageEvent&>(DamageEvent);
@@ -537,7 +558,7 @@ float AZSZombieBase::TakeDamage(float DamageAmount, const FDamageEvent& DamageEv
 	const bool bLethal = DamageAmount >= Health->GetHealth();
 
 	// Dismemberment: limbs come off after enough damage, or from a heavy killing shot; heads pop on big headshot kills.
-	if (UZSGoreSubsystem::DismemberEnabled() && LastHitBone != NAME_None && DamageEvent.IsOfType(FPointDamageEvent::ClassID))
+	if (!IsBoss() && UZSGoreSubsystem::DismemberEnabled() && LastHitBone != NAME_None && DamageEvent.IsOfType(FPointDamageEvent::ClassID))
 	{
 		const FName Cut = SeverBoneFor(LastHitBone);
 		if (Cut != NAME_None && !Severed.Contains(Cut))
@@ -571,7 +592,7 @@ float AZSZombieBase::TakeDamage(float DamageAmount, const FDamageEvent& DamageEv
 
 	// Flinch (the health component already handled death if this was lethal).
 	if (State != EZSZombieState::Dead && FlinchTimer <= 0.f && State != EZSZombieState::Attacking && SpecialTime < 0.f && !bCrawling &&
-		ZombieType != EZSZombieType::Brute && (bLastHitHead || FMath::FRand() < FlinchChance))
+		ZombieType != EZSZombieType::Brute && !IsBoss() && (bLastHitHead || FMath::FRand() < FlinchChance))
 	{
 		UZSZombieAnimInstance* Anim = GetZombieAnim();
 		UAnimSequence* Hit = RandomAnim(HitAnims);
@@ -600,6 +621,11 @@ void AZSZombieBase::HandleDeath(UZSHealthComponent* InHealth, AController* Kille
 	State = EZSZombieState::Dead;
 	--LiveCount;
 	OnKilled.Broadcast(this, Killer, bLastHitHead);
+	if (IsBoss())
+	{
+		if (Telegraph) { Telegraph->Destroy(); Telegraph = nullptr; }
+		PublishBoss();
+	}
 	if (ZombieType == EZSZombieType::Exploder && !bExploded)
 	{
 		FTimerHandle Boom;
@@ -688,6 +714,7 @@ FText AZSZombieBase::TypeName(EZSZombieType Type)
 	case EZSZombieType::Spitter:  return NSLOCTEXT("ZS", "ZSpitter", "SPITTER");
 	case EZSZombieType::Brute:    return NSLOCTEXT("ZS", "ZBrute", "BRUTE");
 	case EZSZombieType::Screamer: return NSLOCTEXT("ZS", "ZScreamer", "SCREAMER");
+	case EZSZombieType::Boss:     return NSLOCTEXT("ZS", "ZBoss", "THE ABOMINATION");
 	default:                      return NSLOCTEXT("ZS", "ZWalker", "WALKER");
 	}
 }

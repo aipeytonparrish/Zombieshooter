@@ -70,7 +70,7 @@ FZSRoundTuning UZSRoundManagerComponent::GetTuning(int32 Round) const
 	const float R = static_cast<float>(FMath::Max(Round, 1));
 	FZSRoundTuning T;
 	// Built-in formulas (also what Data/ZSRounds.csv was generated from). ~1,000 zombies over 20 rounds.
-	T.ZombieCount = FMath::RoundToInt(6.f + 2.6f * R + 0.12f * R * R);
+	T.ZombieCount = FMath::RoundToInt((6.f + 2.6f * R + 0.12f * R * R) * 1.25f);   // x1.25: run length tuning (M12)
 	T.HealthMultiplier = 1.f + 0.1f * (R - 1.f);
 	T.SpeedMultiplier = FMath::Min(1.3f, 1.f + 0.015f * (R - 1.f));
 	T.RunnerChance = FMath::Clamp((R - 2.f) * 0.035f, 0.f, 0.6f);
@@ -131,7 +131,7 @@ void UZSRoundManagerComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 			SpawnTimer = Tuning.SpawnInterval * FMath::FRandRange(0.7f, 1.3f);
 		}
 		GS->ZombiesRemaining = ToSpawn + Alive;
-		if (ToSpawn <= 0 && Alive <= 0)
+		if (ToSpawn <= 0 && Alive <= 0 && !bBossRound)
 		{
 			// Round cleared.
 			GS->Phase = EZSRoundPhase::Break;
@@ -165,6 +165,13 @@ void UZSRoundManagerComponent::StartRound(int32 Round)
 	AZSGameState_Survival* GS = GetState();
 	Tuning = GetTuning(Round);
 	ToSpawn = Tuning.ZombieCount;
+	bBossRound = Round == GS->WinRound;
+	if (bBossRound)
+	{
+		// Boss round: the Abomination plus a small escort; its roars call in more.
+		ToSpawn = 10;
+		Tuning.MaxAlive = FMath::Min(Tuning.MaxAlive, 18);
+	}
 	SpawnTimer = 0.5f;
 	GS->Round = Round;
 	GS->Phase = EZSRoundPhase::Active;
@@ -172,6 +179,10 @@ void UZSRoundManagerComponent::StartRound(int32 Round)
 	if (AZSGameMode_Survival* RoundGM = GetWorld()->GetAuthGameMode<AZSGameMode_Survival>()) { RoundGM->OnRoundStarted(Round); }
 	GS->ZombiesRemaining = ToSpawn + Alive;
 	PlayStinger(RoundStartSound, 0.45f, 0.6f);
+	if (bBossRound)
+	{
+		SpawnBoss();
+	}
 	UE_LOG(LogZS, Log, TEXT("Round %d: %d zombies, health x%.2f, speed x%.2f, runners %.0f%%, interval %.2fs, max alive %d"),
 		Round, Tuning.ZombieCount, Tuning.HealthMultiplier, Tuning.SpeedMultiplier, Tuning.RunnerChance * 100.f, Tuning.SpawnInterval, Tuning.MaxAlive);
 }
@@ -419,4 +430,41 @@ void UZSRoundManagerComponent::MaybeDropPickup(const FVector& Location)
 		GPickups.Add(Pickup);
 		UE_LOG(LogZS, Log, TEXT("Dropped %s pickup"), Pickup->Type == EZSPickupType::Armor ? TEXT("armor") : TEXT("health"));
 	}
+}
+
+void UZSRoundManagerComponent::SpawnExtra(int32 Count)
+{
+	ToSpawn += FMath::Max(0, Count);
+	SpawnTimer = 0.f;
+}
+
+void UZSRoundManagerComponent::SpawnBoss()
+{
+	// Farthest spawn point from the player (or a ring around them).
+	const APawn* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+	FVector Loc = Player ? Player->GetActorLocation() + Player->GetActorForwardVector() * 2500.f : FVector::ZeroVector;
+	float Best = -1.f;
+	for (const AZSSpawnPoint* SP : SpawnPoints)
+	{
+		if (!SP || !Player) { continue; }
+		const float D = FVector::Dist(SP->GetActorLocation(), Player->GetActorLocation());
+		if (D > Best && D < 6000.f) { Best = D; Loc = SP->GetActorLocation(); }
+	}
+	Loc.Z += 120.f;   // room for the scaled capsule
+	const FTransform T(Player ? (Player->GetActorLocation() - Loc).GetSafeNormal2D().Rotation() : FRotator::ZeroRotator, Loc);
+	AZSZombieBase* Boss = GetWorld()->SpawnActorDeferred<AZSZombieBase>(AZSZombieBase::StaticClass(), T, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);
+	if (!Boss)
+	{
+		UE_LOG(LogZS, Error, TEXT("Boss failed to spawn at %s"), *Loc.ToCompactString());
+		return;
+	}
+	Boss->ZombieType = EZSZombieType::Boss;
+	Boss->FinishSpawning(T);
+	Boss->OnKilled.AddUObject(this, &ThisClass::HandleZombieKilled);
+	Boss->OnKilled.AddLambda([this](AZSZombieBase*, AController*, bool)
+	{
+		if (AZSGameMode_Survival* GM = Cast<AZSGameMode_Survival>(GetOwner())) { GM->OnBossKilled(); }
+	});
+	++Alive;
+	UE_LOG(LogZS, Log, TEXT("Boss spawned at %s"), *Loc.ToCompactString());
 }

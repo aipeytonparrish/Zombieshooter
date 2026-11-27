@@ -21,7 +21,19 @@ enum class EZSZombieType : uint8
 	Exploder,   // swollen; bursts when shot dead or when it reaches you
 	Spitter,    // lobs acid from range
 	Brute,      // huge, tanky, charges and knocks you back
-	Screamer    // shrieks to enrage nearby zombies
+	Screamer,   // shrieks to enrage nearby zombies
+	Boss        // round-20 mutant (Milestone 12)
+};
+
+UENUM()
+enum class EZSBossAction : uint8
+{
+	None,
+	Slam,      // telegraphed ground slam (jump or get out of the ring)
+	Throw,     // hurls a chunk of debris at a marked spot
+	Roar,      // calls in adds (also on phase change)
+	Charge,    // phase 3: rushes the player
+	Exposed    // stunned after a slam: weak points take triple damage
 };
 
 UENUM(BlueprintType)
@@ -126,6 +138,12 @@ public:
 	/** Screamer buff: move faster for a while. */
 	void ApplySpeedBuff(float Multiplier, float Duration);
 
+	// ---- Boss ----
+	static constexpr float BossMaxHealth = 16000.f;
+	bool IsBoss() const { return ZombieType == EZSZombieType::Boss; }
+	int32 GetBossPhase() const { return BossPhase; }
+	bool IsBossExposed() const { return BossAction == EZSBossAction::Exposed; }
+
 	UFUNCTION(BlueprintPure, Category = "ZS|Zombie")
 	EZSZombieState GetZombieState() const { return State; }
 
@@ -195,6 +213,26 @@ private:
 	float BuffMultiplier = 1.f;
 	float ChargeTime = 0.f;
 	TWeakObjectPtr<AController> LastInstigator;
+
+	// ---- Boss (ZSZombieBoss.cpp) ----
+	void ApplyBossDefaults();
+	void UpdateBoss(float DeltaSeconds);
+	void StartBossAction(EZSBossAction Action);
+	void BossSlamImpact();
+	void BossThrow();
+	void BossRoar(int32 Adds);
+	float BossDamageScale(FName Bone) const;
+	void PublishBoss();
+	int32 BossPhase = 1;
+	EZSBossAction BossAction = EZSBossAction::None;
+	float BossActionTime = 0.f;
+	bool bBossActionFired = false;
+	float SlamCooldown = 4.f;
+	float ThrowCooldown = 6.f;
+	float RoarCooldown = 25.f;
+	float BossChargeCooldown = 8.f;
+	FVector ThrowTarget = FVector::ZeroVector;
+	UPROPERTY(Transient) TObjectPtr<AActor> Telegraph;
 
 	UZSZombieAnimInstance* GetZombieAnim() const;
 

@@ -32,8 +32,9 @@ AZSTaskMarker::AZSTaskMarker()
 	Light->SetCastShadows(false);
 }
 
-void AZSTaskMarker::Setup(float Radius, const FLinearColor& Color)
+void AZSTaskMarker::Setup(float Radius, const FLinearColor& Color, bool bBeam)
 {
+	Beam->SetVisibility(bBeam);
 	Ring->SetRelativeScale3D(FVector(Radius / 50.f, Radius / 50.f, 0.04f));
 	Ring->SetRelativeLocation(FVector(0.f, 0.f, 3.f));
 	if (UMaterialInterface* Shape = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")))

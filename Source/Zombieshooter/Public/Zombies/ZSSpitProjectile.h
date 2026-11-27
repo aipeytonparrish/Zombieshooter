@@ -22,6 +22,13 @@ public:
 	float PoolDamagePerSecond = 10.f;
 	float PoolLifetime = 5.f;
 	float PoolRadius = 130.f;
+	/** false = no acid pool (boss debris). */
+	bool bLeavePool = true;
+	/** Area damage on impact (0 = none). */
+	float SplashRadius = 0.f;
+	float SplashDamage = 0.f;
+	FLinearColor Color = FLinearColor(0.35f, 1.f, 0.1f);
+	float Size = 1.f;
 
 	/** Velocity needed to land at Target from here (high-ish arc). */
 	static FVector AimVelocity(const FVector& From, const FVector& Target, float Speed);

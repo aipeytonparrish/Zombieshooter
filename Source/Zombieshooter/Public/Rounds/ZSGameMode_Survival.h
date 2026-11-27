@@ -49,6 +49,8 @@ public:
 	void RewardKill(AZSZombieBase* Zombie, bool bHeadshot);
 	void OnRoundStarted(int32 Round);
 	void OnRoundCleared(int32 Round);
+	/** The round-20 boss died: slow motion, victory banner, then the run is won. */
+	void OnBossKilled();
 
 	/** Power-up picked up: start its timer (or fire it, for Scorched Earth). */
 	void ActivatePowerUp(EZSPowerUp PowerUp);

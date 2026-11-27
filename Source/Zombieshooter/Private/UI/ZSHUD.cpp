@@ -430,6 +430,7 @@ void AZSHUD::DrawSurvival(const AZSGameState_Survival* GS, const AZSPlayerCharac
 		DrawTask(GS, Scale);
 		DrawMissionTracker(Scale);
 		DrawPowerUps(GS, Scale);
+		DrawBoss(GS, Scale);
 	}
 	DrawPauseMenu(Scale);
 }
@@ -611,6 +612,43 @@ void AZSHUD::DrawScreenBlood(float DeltaTime)
 			Tri.BlendMode = SE_BLEND_Translucent;
 			Canvas->DrawItem(Tri);
 		}
+	}
+}
+
+void AZSHUD::DrawBoss(const AZSGameState_Survival* GS, float Scale)
+{
+	UFont* Font = GEngine->GetMediumFont();
+	UFont* Big = GEngine->GetLargeFont();
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (GS->bBossActive)
+	{
+		const float W = 760.f * Scale, H = 16.f * Scale;
+		const float X = (Canvas->ClipX - W) * 0.5f, Y = 70.f * Scale;
+		DrawCentered(GS->BossName.ToString(), Y - 38.f * Scale, Font, 1.5f * Scale, FLinearColor(0.95f, 0.3f, 0.2f, 1.f));
+		FCanvasTileItem Back(FVector2D(X - 3.f, Y - 3.f), FVector2D(W + 6.f, H + 6.f), FLinearColor(0.f, 0.f, 0.f, 0.6f));
+		Back.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(Back);
+		const FLinearColor Fill = GS->bBossExposed ? FLinearColor(1.f, 0.85f, 0.2f, 1.f) : FLinearColor(0.75f, 0.06f, 0.04f, 1.f);
+		FCanvasTileItem Bar(FVector2D(X, Y), FVector2D(W * FMath::Clamp(GS->BossHealthPct, 0.f, 1.f), H), Fill);
+		Canvas->DrawItem(Bar);
+		// Phase marks at 66 % and 33 %.
+		for (const float Mark : { 0.66f, 0.33f })
+		{
+			FCanvasTileItem Tick(FVector2D(X + W * Mark - 1.f, Y - 4.f), FVector2D(2.f * Scale, H + 8.f), FLinearColor(1.f, 1.f, 1.f, 0.7f));
+			Canvas->DrawItem(Tick);
+		}
+		DrawCentered(FString::Printf(TEXT("PHASE %d%s"), GS->BossPhase, GS->bBossExposed ? TEXT("   -   WEAK POINTS EXPOSED") : TEXT("")),
+			Y + H + 6.f * Scale, Font, 1.f * Scale, GS->bBossExposed ? HeadGold : HudWhite);
+	}
+	if (Now - GS->BossCalloutTime < 2.5f && !GS->BossCallout.IsEmpty())
+	{
+		FLinearColor C(1.f, 0.4f, 0.25f, FMath::Clamp(2.5f - (Now - GS->BossCalloutTime), 0.f, 1.f));
+		DrawCentered(GS->BossCallout.ToString(), Canvas->ClipY * 0.2f, Font, 1.6f * Scale, C);
+	}
+	if (Now - GS->BossDeathTime < 1.5f)   // world seconds (slow motion makes this ~3 s)
+	{
+		DrawCentered(TEXT("THE ABOMINATION IS DEAD"), Canvas->ClipY * 0.3f, Big, 3.f * Scale, HeadGold);
+		DrawCentered(TEXT("YOU SURVIVED"), Canvas->ClipY * 0.3f + 80.f * Scale, Big, 1.8f * Scale, HudWhite);
 	}
 }
 
@@ -799,6 +837,16 @@ void AZSHUD::DrawResults(const AZSGameState_Survival* GS, float Scale)
 		Y += 50.f * Scale;
 	}
 	DrawCentered(FString::Printf(TEXT("Cash in your profile: $%lld"), GS->ProfileCash), Y, Small, 1.2f * Scale, HudWhite);
+	Y += 40.f * Scale;
+	// Unlocks and missions (skip the plain "Level N reached" lines - the level-up line covers them).
+	for (const FText& T : R.Unlocks)
+	{
+		const FString S = T.ToString();
+		if (S.StartsWith(TEXT("Level "))) { continue; }
+		const bool bLost = S.Contains(TEXT("lost"));
+		DrawCentered(S, Y, Small, 1.05f * Scale, bLost ? FLinearColor(0.95f, 0.45f, 0.35f, 1.f) : FLinearColor(0.7f, 0.95f, 0.6f, 1.f));
+		Y += 28.f * Scale;
+	}
 
 	DrawCentered(FString::Printf(TEXT("Press A / Enter to continue   (%d)"), FMath::CeilToInt(GS->RestartIn)), Canvas->ClipY * 0.88f, Small, 1.3f * Scale, HeadGold);
 }

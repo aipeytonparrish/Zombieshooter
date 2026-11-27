@@ -138,6 +138,10 @@ public:
 	UFUNCTION(Exec)
 	void ZSHurtBone(const FString& Bone, float Damage);
 
+	/** Debug: spawn the boss now (survival: jumps to the boss round). */
+	UFUNCTION(Exec)
+	void ZSBoss();
+
 	/** Power-up now: 1 Overkill, 2 One Shot, 3 Scorched Earth, 4 Payday. */
 	UFUNCTION(Exec)
 	void ZSPowerUp(int32 Type);

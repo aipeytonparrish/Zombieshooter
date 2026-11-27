@@ -261,6 +261,31 @@ void AZSPlayerController::StartAutoShotIfRequested()
 			GetWorldTimerManager().SetTimer(HurtTimer, FTimerDelegate::CreateWeakLambda(this, [this, B, Dmg]() { ZSHurtBone(B, Dmg); }), 3.f + i, false);
 		}
 	}
+	// -ZSAutoFaceBoss=<seconds>: stand 10 m in front of the boss, looking at it (screenshots).
+	float FaceBossAt = 0.f;
+	if (FParse::Value(Cmd, TEXT("ZSAutoFaceBoss="), FaceBossAt))
+	{
+		FTimerHandle FaceTimer;
+		GetWorldTimerManager().SetTimer(FaceTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			for (TActorIterator<AZSZombieBase> It(GetWorld()); It; ++It)
+			{
+				if (It->IsBoss() && GetPawn())
+				{
+					const FVector BossLoc = It->GetActorLocation();
+					const FVector Spot = BossLoc + It->GetActorForwardVector() * 1000.f - FVector(0, 0, 100.f);
+					GetPawn()->TeleportTo(Spot, GetPawn()->GetActorRotation());
+					SetControlRotation((BossLoc + FVector(0, 0, 60.f) - (Spot + FVector(0, 0, 70.f))).Rotation());
+					break;
+				}
+			}
+		}), FaceBossAt, false);
+	}
+	if (FParse::Param(Cmd, TEXT("ZSAutoBoss")))
+	{
+		FTimerHandle BossTimer;
+		GetWorldTimerManager().SetTimer(BossTimer, FTimerDelegate::CreateWeakLambda(this, [this]() { ZSBoss(); }), 1.0f, false);
+	}
 	int32 AutoPowerUp = 0;
 	if (FParse::Value(Cmd, TEXT("ZSAutoPowerUp="), AutoPowerUp))
 	{
@@ -762,5 +787,16 @@ void AZSPlayerController::ZSHurtBone(const FString& Bone, float Damage)
 		Ev.HitInfo.ImpactPoint = It->GetMesh()->GetSocketLocation(Ev.HitInfo.BoneName);
 		Ev.ShotDirection = (Ev.HitInfo.ImpactPoint - PlayerCameraManager->GetCameraLocation()).GetSafeNormal();
 		It->TakeDamage(Damage, Ev, this, GetPawn());
+	}
+}
+
+void AZSPlayerController::ZSBoss()
+{
+	if (AZSGameMode_Survival* GM = GetWorld()->GetAuthGameMode<AZSGameMode_Survival>())
+	{
+		if (const AZSGameState_Survival* GS = GetWorld()->GetGameState<AZSGameState_Survival>())
+		{
+			GM->GetRoundManager()->SkipToRound(GS->WinRound);
+		}
 	}
 }

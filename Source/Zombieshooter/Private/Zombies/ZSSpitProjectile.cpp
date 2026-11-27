@@ -62,7 +62,10 @@ AZSSpitProjectile::AZSSpitProjectile()
 void AZSSpitProjectile::BeginPlay()
 {
 	Super::BeginPlay();
-	ApplyGlow(Glob, AcidGreen, 0.9f);
+	ApplyGlow(Glob, Color, 0.9f);
+	Light->SetLightColor(Color);
+	Glob->SetRelativeScale3D(FVector(0.28f * Size));
+	Collision->SetSphereRadius(12.f * Size);
 	Collision->OnComponentHit.AddDynamic(this, &ThisClass::HandleHit);
 	if (AActor* Shooter = GetOwner())
 	{
@@ -101,6 +104,26 @@ void AZSSpitProjectile::HandleHit(UPrimitiveComponent* HitComp, AActor* Other, U
 		{
 			Gore->SplatterNearCamera(Hit.ImpactPoint, 400.f, 0.5f);
 		}
+	}
+	if (SplashRadius > 0.f)
+	{
+		if (APawn* P = UGameplayStatics::GetPlayerPawn(this, 0))
+		{
+			const float D = FVector::Dist(P->GetActorLocation(), Hit.ImpactPoint);
+			if (D < SplashRadius && !Cast<AZSPlayerCharacter>(Other))
+			{
+				UGameplayStatics::ApplyDamage(P, SplashDamage * (1.f - D / SplashRadius * 0.6f), GetInstigatorController(), this, UDamageType::StaticClass());
+			}
+		}
+		if (UZSGoreSubsystem* Gore = GetWorld()->GetSubsystem<UZSGoreSubsystem>())
+		{
+			Gore->SplatterNearCamera(Hit.ImpactPoint, SplashRadius, 0.4f);
+		}
+	}
+	if (!bLeavePool)
+	{
+		Destroy();
+		return;
 	}
 	// Pool on the ground below the impact.
 	FHitResult Ground;

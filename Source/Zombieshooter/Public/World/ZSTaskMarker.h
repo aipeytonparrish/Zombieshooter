@@ -16,7 +16,7 @@ class ZOMBIESHOOTER_API AZSTaskMarker : public AActor
 public:
 	AZSTaskMarker();
 
-	void Setup(float Radius, const FLinearColor& Color);
+	void Setup(float Radius, const FLinearColor& Color, bool bBeam = true);
 	virtual void Tick(float DeltaSeconds) override;
 
 private:

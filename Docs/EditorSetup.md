@@ -473,3 +473,27 @@ They float as glowing orbs with their name; active ones show as timer bars botto
 
 Console: `ZSZombies <count> <type>` (3 crawler, 4 bloater, 5 spitter, 6 brute, 7 screamer, 8 one of each),
 `ZSPowerUp 1-4`, `ZSHurtBone <bone> <damage>` (gore testing).
+
+## Milestone 12 — The boss and the win
+
+**Round 20 is the boss round.** *The Abomination* (16,000 HP, 2.3× size) arrives with a small escort; the round
+ends only when it dies. A health bar with phase marks sits at the top of the screen and callouts tell you what it's
+doing.
+
+| Phase | Health | New moves |
+|---|---|---|
+| 1 | 100–66 % | Swipes (knockback) and the **Ground Slam**: a red ring appears around it for ~1.3 s — jump or get out. After a slam it's **stunned for 3 s: weak points (head, chest) take triple damage** (bar turns gold) |
+| 2 | 66–33 % | Roars in adds (armoured while roaring), **hurls debris** at an orange ring where you're standing |
+| 3 | < 33 % | Enraged: faster, slams more often, **charges** |
+
+Killing it: slow motion, "THE ABOMINATION IS DEAD", every remaining zombie drops, +2,000 XP / $1,000, then the
+results screen as a **win** (loadout kept, everything banked, win bonus, mission progress banked).
+One Shot is capped against the boss; Scorched Earth doesn't touch it.
+
+### Run length (target 40–75 min)
+Rounds 1–19 now total ~1,130 zombies (counts ×1.25) and breaks are 20 s. At ~1.5 s per zombie (strong player) that
+is ~38 min plus breaks and the boss ≈ 45 min; at ~2.5 s per zombie ≈ 60 min. Tune in `Data/ZSRounds.csv` (re-run
+`create_core_materials.py` to rebuild `CT_ZSRounds`) and `BreakDuration` on the round manager. The boss model is a
+scaled zombie until a mutant mesh arrives (see AssetRequests).
+
+Console: `ZSBoss` jumps to the boss round.

@@ -125,6 +125,11 @@ mist), **screen-blood textures**, an **explosion Niagara** for the Bloater, an *
 **zombie vocal sounds** for each special (Screamer shriek especially), and **power-up pickup models / icons**.
 Distinct meshes for the Brute (big mutant) and Spitter would help readability (currently tinted / scaled zombies).
 
+### Milestone 12 — Boss (built with a scaled zombie)
+Wanted: a **giant mutant boss mesh** (Mannequin-compatible skeleton is ideal, so the existing clips work) with
+animations for: idle, walk, run/charge, two swipes, ground slam (windup + impact), throw, roar, stagger/stunned loop,
+death. Plus **boss music**, roar / slam / footstep sounds, a slam shockwave Niagara and a camera shake.
+
 ### Later milestones
 City block kit (M14), character creator parts on the Mannequin skeleton (M9), all special
 zombies + gib meshes (M11), boss (M12), music + UI art (M14). Detailed specs get added here as each milestone starts.

@@ -45,7 +45,7 @@ public:
 	float PreGameDuration = 8.f;
 
 	UPROPERTY(EditAnywhere, Category = "ZS|Rounds", meta = (ForceUnits = "s"))
-	float BreakDuration = 12.f;
+	float BreakDuration = 20.f;
 
 	/** Hard ceiling on live zombies whatever the curve says (performance). */
 	UPROPERTY(EditAnywhere, Category = "ZS|Rounds")
@@ -83,6 +83,12 @@ public:
 	/** Stop everything: the player died. */
 	void EndRun();
 
+	/** Adds zombies to the current round (boss roars). */
+	void SpawnExtra(int32 Count);
+
+	/** True during the boss round (the round ends when the boss dies, not by count). */
+	bool IsBossRound() const { return bBossRound; }
+
 	/** Debug: jump straight to a round (kills the current zombies). */
 	void SkipToRound(int32 Round);
 
@@ -111,6 +117,8 @@ private:
 
 	FZSRoundTuning Tuning;
 	int32 ToSpawn = 0;
+	bool bBossRound = false;
+	void SpawnBoss();
 	int32 Alive = 0;
 	float SpawnTimer = 0.f;
 	float PhaseTimer = 0.f;

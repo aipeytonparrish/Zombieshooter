@@ -90,6 +90,22 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") FText TaskResult;
 	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") float TaskResultTime = -100.f;
 
+	// ---- Boss (round 20) ----
+	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") bool bBossActive = false;
+	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") float BossHealthPct = 1.f;
+	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") int32 BossPhase = 1;
+	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") bool bBossExposed = false;
+	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") FText BossName;
+	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") FText BossCallout;
+	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") float BossCalloutTime = -100.f;
+	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") float BossDeathTime = -100.f;
+
+	void BossSay(const FText& Text)
+	{
+		BossCallout = Text;
+		BossCalloutTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	}
+
 	// ---- Power-ups ----
 	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") FText PowerUpFlash;
 	UPROPERTY(BlueprintReadOnly, Category = "ZS|Survival") float PowerUpFlashTime = -100.f;

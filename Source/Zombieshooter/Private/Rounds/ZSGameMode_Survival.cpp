@@ -276,3 +276,35 @@ void AZSGameMode_Survival::ActivatePowerUp(EZSPowerUp PowerUp)
 	GS->PowerUpFlash = AZSGameState_Survival::PowerUpName(PowerUp);
 	GS->PowerUpFlashTime = Now;
 }
+
+void AZSGameMode_Survival::OnBossKilled()
+{
+	AZSGameState_Survival* GS = GetGameState<AZSGameState_Survival>();
+	if (!GS || bRunEnded)
+	{
+		return;
+	}
+	GS->BossDeathTime = GetWorld()->GetTimeSeconds();
+	GS->bBossActive = false;
+	AddReward(2000, 1000, NSLOCTEXT("ZS", "BossKilled", "THE ABOMINATION IS DEAD"), true);
+	RoundManager->EndRun();   // stop spawning
+
+	// The rest of the horde drops with it.
+	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+	for (TActorIterator<AZSZombieBase> It(GetWorld()); It; ++It)
+	{
+		if (!It->IsDead() && !It->IsBoss()) { It->GetHealth()->Kill(PC, nullptr); }
+	}
+
+	// Slow motion for a moment, then the results (won).
+	UGameplayStatics::SetGlobalTimeDilation(this, 0.25f);
+	FTimerHandle Restore, Finish;
+	GetWorldTimerManager().SetTimer(Restore, FTimerDelegate::CreateWeakLambda(this, [this]() { UGameplayStatics::SetGlobalTimeDilation(this, 1.f); }), 0.5f, false);   // 2 s real time
+	GetWorldTimerManager().SetTimer(Finish, FTimerDelegate::CreateWeakLambda(this, [this]()
+	{
+		if (AZSGameState_Survival* State = GetGameState<AZSGameState_Survival>())
+		{
+			OnRoundCleared(State->WinRound);   // round >= WinRound -> EndRun(Won)
+		}
+	}), 1.5f, false);
+}

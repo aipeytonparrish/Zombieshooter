@@ -311,6 +311,8 @@ private:
 
 	// ---- Slide state ----
 	bool bWantsToSlide = false;
+	/** Hold-to-crouch released mid-slide: the slide carries on, then stands up. */
+	bool bStandAfterSlide = false;
 	float SlideBoostCooldownRemaining = 0.f;
 
 	// ---- Dash state ----

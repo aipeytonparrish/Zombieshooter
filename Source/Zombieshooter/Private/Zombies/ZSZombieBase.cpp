@@ -86,7 +86,7 @@ AZSZombieBase::AZSZombieBase()
 	USkeletalMeshComponent* MeshComp = GetMesh();
 	MeshComp->SetRelativeLocationAndRotation(FVector(0.f, 0.f, -90.f), FRotator(0.f, -90.f, 0.f));
 	MeshComp->SetCollisionProfileName(UCollisionProfile::CustomCollisionProfileName);
-	MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);   // physics too, for the blended hit reactions (responses stay Ignore)
+	MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	MeshComp->SetCollisionObjectType(ECC_PhysicsBody);
 	MeshComp->SetCollisionResponseToAllChannels(ECR_Ignore);
 	MeshComp->SetCollisionResponseToChannel(ZS_TRACE_WEAPON, ECR_Block);
@@ -132,7 +132,6 @@ void AZSZombieBase::BeginPlay()
 	ApplyTypeDefaults();
 
 	Health->OnDeath.AddDynamic(this, &ThisClass::HandleDeath);
-	GetMesh()->SetEnableGravity(false);   // hit-react bodies shouldn't sag; the ragdoll turns it back on
 
 	if (UZSAimAssistSubsystem* Registry = GetWorld()->GetSubsystem<UZSAimAssistSubsystem>())
 	{
@@ -789,81 +788,66 @@ void AZSZombieBase::HandleDeath(UZSHealthComponent* InHealth, AController* Kille
 
 void AZSZombieBase::StartPhysicalHit(FName Bone, const FVector& Direction, float Damage)
 {
-	USkeletalMeshComponent* MeshComp = GetMesh();
-	if (Bone == NAME_None || !MeshComp || !MeshComp->GetBodyInstance(Bone) || bCrawling)
+	// Visual-only jolt: the mesh rocks back / twists around the hips and springs back. (This used to hand the upper
+	// body to physics for a moment, which could pull the hit boxes off the drawn body so quick follow-up body shots
+	// missed.) The physics bodies stay kinematic and always match what you see.
+	if (bCrawling)
 	{
 		return;
 	}
+	const FVector Local = GetActorTransform().InverseTransformVectorNoScale(Direction.GetSafeNormal());   // X forward, Y right
 	const FString B = Bone.ToString().ToLower();
-	FName Root = TEXT("spine_01");
-	if (B.StartsWith(TEXT("thigh")) || B.StartsWith(TEXT("calf")) || B.StartsWith(TEXT("foot")))
-	{
-		Root = B.EndsWith(TEXT("_l")) ? FName(TEXT("thigh_l")) : FName(TEXT("thigh_r"));
-	}
-	else if (B.Contains(TEXT("head")) || B.Contains(TEXT("neck")))
-	{
-		Root = TEXT("spine_03");
-	}
-	if (!MeshComp->GetBodyInstance(Root))
-	{
-		Root = Bone;
-	}
-	if (HitReactRoot != NAME_None && HitReactRoot != Root)
-	{
-		StopPhysicalHit();
-	}
-	HitReactRoot = Root;
-	HitReactPeak = FMath::Clamp(0.25f + Damage / 90.f, 0.3f, 0.75f);
+	const bool bHead = B.Contains(TEXT("head")) || B.Contains(TEXT("neck"));
+	const bool bLeg = B.StartsWith(TEXT("thigh")) || B.StartsWith(TEXT("calf")) || B.StartsWith(TEXT("foot"));
+	const float K = FMath::Clamp(Damage / 30.f, 0.6f, 2.2f) * (bHead ? 1.5f : 1.f);
+	// Shot from the front (Local.X < 0) pitches the body back; from the side, rolls it away; always a little twist.
+	JoltVel.Pitch += -Local.X * 140.f * K * (bLeg ? 0.4f : 1.f);
+	JoltVel.Roll += Local.Y * 110.f * K;
+	JoltVel.Yaw += FMath::FRandRange(-1.f, 1.f) * 90.f * K;
 	HitReactAlpha = 1.f;
-	MeshComp->SetAllBodiesBelowSimulatePhysics(Root, true, true);
-	MeshComp->SetAllBodiesBelowPhysicsBlendWeight(Root, HitReactPeak, false, true);
-	const float Kick = FMath::Clamp(Damage * 14.f, 250.f, 1100.f);   // cm/s velocity change on the hit body
-	MeshComp->AddImpulse(Direction.GetSafeNormal() * Kick, Bone, true);
 }
 
 void AZSZombieBase::UpdatePhysicalHit(float DeltaSeconds)
 {
-	if (HitReactRoot == NAME_None)
+	if (State == EZSZombieState::Dead)
 	{
 		return;
 	}
-	HitReactAlpha -= DeltaSeconds / 0.32f;
-	USkeletalMeshComponent* MeshComp = GetMesh();
-	if (HitReactAlpha <= 0.f)
+	// Jolt spring (stiff, quick: each hit is a sharp rock that's gone in ~0.3 s).
+	const float Kp = 160.f, Kd = 16.f;
+	auto Spring = [DeltaSeconds, Kp, Kd](double& X, double& V) { V += (-Kp * X - Kd * V) * DeltaSeconds; X += V * DeltaSeconds; };
+	Spring(Jolt.Pitch, JoltVel.Pitch);
+	Spring(Jolt.Roll, JoltVel.Roll);
+	Spring(Jolt.Yaw, JoltVel.Yaw);
+	Jolt.Pitch = FMath::Clamp(Jolt.Pitch, -25.0, 25.0);
+	Jolt.Roll = FMath::Clamp(Jolt.Roll, -20.0, 20.0);
+	Jolt.Yaw = FMath::Clamp(Jolt.Yaw, -20.0, 20.0);
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
 	{
-		StopPhysicalHit();
-		return;
+		// Rotate the mesh about the capsule centre (roughly the hips), not its feet.
+		const FQuat J = Jolt.Quaternion();
+		MeshComp->SetRelativeLocationAndRotation(J.RotateVector(FVector(0.f, 0.f, -90.f)), J * FRotator(0.f, -90.f, 0.f).Quaternion());
 	}
-	MeshComp->SetAllBodiesBelowPhysicsBlendWeight(HitReactRoot, HitReactPeak * HitReactAlpha * HitReactAlpha, false, true);
-	// Stopping power: the stride stutters while the hit plays out.
-	if (UCharacterMovementComponent* Move = GetCharacterMovement(); Move && !bCrawling)
+	if (HitReactAlpha > 0.f)
 	{
-		Move->MaxWalkSpeed = MoveSpeed * BuffMultiplier * (1.f - 0.65f * HitReactAlpha);
+		HitReactAlpha = FMath::Max(0.f, HitReactAlpha - DeltaSeconds / 0.35f);
+		// Stopping power: the stride stutters while the hit plays out.
+		if (UCharacterMovementComponent* Move = GetCharacterMovement(); Move && !bCrawling)
+		{
+			Move->MaxWalkSpeed = MoveSpeed * BuffMultiplier * (1.f - 0.6f * HitReactAlpha);
+		}
 	}
 }
 
 void AZSZombieBase::StopPhysicalHit()
 {
-	if (HitReactRoot != NAME_None)
-	{
-		if (USkeletalMeshComponent* MeshComp = GetMesh(); MeshComp && State != EZSZombieState::Dead)
-		{
-			MeshComp->SetAllBodiesBelowPhysicsBlendWeight(HitReactRoot, 0.f, false, true);
-			MeshComp->SetAllBodiesBelowSimulatePhysics(HitReactRoot, false, true);
-		}
-		if (UCharacterMovementComponent* Move = GetCharacterMovement(); Move && State != EZSZombieState::Dead && !bCrawling)
-		{
-			Move->MaxWalkSpeed = MoveSpeed * BuffMultiplier;
-		}
-	}
-	HitReactRoot = NAME_None;
 	HitReactAlpha = 0.f;
+	Jolt = JoltVel = FRotator::ZeroRotator;
 }
 
 void AZSZombieBase::EnterRagdoll()
 {
-	HitReactRoot = NAME_None;
-	HitReactAlpha = 0.f;
+	StopPhysicalHit();
 	if (UZSZombieAnimInstance* Anim = GetZombieAnim())
 	{
 		Anim->Freeze();

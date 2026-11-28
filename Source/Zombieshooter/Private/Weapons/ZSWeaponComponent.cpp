@@ -29,6 +29,7 @@
 #include "HAL/IConsoleManager.h"
 #include "Zombieshooter.h"
 
+static TAutoConsoleVariable<int32> CVarZSLogHits(TEXT("zs.LogHits"), 0, TEXT("Log what every bullet segment hits (actor, component, bone)."));
 static TAutoConsoleVariable<int32> CVarZSShowImpacts(TEXT("zs.ShowImpacts"), 0,
 	TEXT("Draw bullet impact points (1) and tracers (2)."));
 
@@ -900,6 +901,10 @@ void UZSWeaponComponent::TraceBullet(const FVector& Start, const FVector& Direct
 		}
 
 		Travelled += Hit.Distance;
+		if (CVarZSLogHits.GetValueOnGameThread())
+		{
+			UE_LOG(LogZS, Warning, TEXT("Bullet hit %s / %s bone %s at %.0f cm"), *GetNameSafe(Hit.GetActor()), *GetNameSafe(Hit.GetComponent()), *Hit.BoneName.ToString(), Travelled);
+		}
 		if (DebugMode >= 2)
 		{
 			DrawDebugLine(World, SegmentStart, Hit.ImpactPoint, FColor::Yellow, false, 0.05f, 0, 0.5f);

@@ -14,6 +14,7 @@
 #include "Engine/World.h"
 #include "Zombies/ZSZombieBase.h"
 #include "Player/ZSCameraComponent.h"
+#include "Movement/ZSMovementComponent.h"
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/DamageType.h"
@@ -29,6 +30,8 @@
 #include "Combat/ZSHealthComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "PhysicsEngine/BodyInstance.h"
+#include "PhysicsEngine/PhysicsAsset.h"
+#include "PhysicsEngine/SkeletalBodySetup.h"
 #include "Zombieshooter.h"
 #include "World/ZSBuyDoor.h"
 
@@ -418,11 +421,45 @@ void AZSPlayerController::StartAutoShotIfRequested()
 		}), 0.48f, true, 1.f);
 	}
 
+	// -ZSAutoSlide[=hold]: run forward with sprint on, tap crouch at 1.5 s (released 0.1 s later), log the movement every
+	// 0.1 s. "hold" uses hold-to-crouch (the release is what used to cancel slides).
+	FString SlideMode;
+	if (FParse::Value(Cmd, TEXT("ZSAutoSlide="), SlideMode) || FParse::Param(Cmd, TEXT("ZSAutoSlide")))
+	{
+		const bool bToggle = SlideMode != TEXT("hold");
+		const double T0 = GetWorld()->GetTimeSeconds();
+		FTimerHandle SlideTimer;
+		GetWorldTimerManager().SetTimer(SlideTimer, FTimerDelegate::CreateWeakLambda(this, [this, T0, bToggle]()
+		{
+			AZSPlayerCharacter* Char = Cast<AZSPlayerCharacter>(GetPawn());
+			UZSMovementComponent* Move = Char ? Char->GetZSMovement() : nullptr;
+			if (!Move) { return; }
+			const double T = GetWorld()->GetTimeSeconds() - T0;
+			if (T > 4.0) { return; }
+			Char->AddMovementInput(FRotator(0.f, GetControlRotation().Yaw, 0.f).Vector(), 1.f);
+			if (T < 1.5 && Move->IsMovingOnGround()) { Move->Velocity = FRotator(0.f, GetControlRotation().Yaw, 0.f).Vector() * 780.f; }   // stand-in for a sprint
+			Move->SetSprintInput(T < 3.5);
+			static int32 Step = 0;
+			if (T >= 1.5 && Step == 0) { Step = 1; Move->HandleCrouchPressed(bToggle); UE_LOG(LogZS, Warning, TEXT("AutoSlide: crouch pressed (%s)"), bToggle ? TEXT("toggle") : TEXT("hold")); }
+			if (T >= 1.6 && Step == 1) { Step = 2; Move->HandleCrouchReleased(bToggle); UE_LOG(LogZS, Warning, TEXT("AutoSlide: crouch released")); }
+			static double NextLog = 0.0;
+			if (T >= NextLog && T > 1.0)
+			{
+				NextLog = T + 0.1;
+				UE_LOG(LogZS, Warning, TEXT("AutoSlide t=%.2f ign=%d acc=%.0f maxspd=%.0f mode=%d custom=%d sliding=%d crouched=%d speed=%.0f"), T, Char->IsMoveInputIgnored() ? 1 : 0, Move->GetCurrentAcceleration().Size(), Move->GetMaxSpeed(), (int32)Move->MovementMode.GetValue(),
+					(int32)Move->CustomMovementMode, Move->IsSliding() ? 1 : 0, Char->bIsCrouched ? 1 : 0, Move->Velocity.Size2D());
+			}
+		}), 0.01f, true);
+	}
+
 	// -ZSAutoAim: keep the view on the nearest live zombie's chest (repeatable damage tests).
 	if (FParse::Param(Cmd, TEXT("ZSAutoAim")))
 	{
+		FString AimBoneStr = TEXT("spine_02");
+		FParse::Value(Cmd, TEXT("ZSAutoAimBone="), AimBoneStr);
+		const FName AimBone(*AimBoneStr);
 		FTimerHandle AimTimer;
-		GetWorldTimerManager().SetTimer(AimTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
+		GetWorldTimerManager().SetTimer(AimTimer, FTimerDelegate::CreateWeakLambda(this, [this, AimBone]()
 		{
 			const AZSPlayerCharacter* Char = Cast<AZSPlayerCharacter>(GetPawn());
 			if (!Char) { return; }
@@ -435,13 +472,13 @@ void AZSPlayerController::StartAutoShotIfRequested()
 				if (It->IsDead() || D >= BestD) { continue; }
 				FHitResult Hit;
 				FCollisionQueryParams Q(SCENE_QUERY_STAT(ZSAutoAim), false, Char);
-				const FVector Chest = It->GetMesh()->GetBoneLocation(TEXT("spine_02"));
+				const FVector Chest = It->GetMesh()->GetBoneLocation(AimBone);
 				if (GetWorld()->LineTraceSingleByChannel(Hit, Eye, Chest, ECC_Visibility, Q) && Hit.GetActor() != *It) { continue; }   // behind a wall
 				Best = *It; BestD = D;
 			}
 			if (Best)
 			{
-				SetControlRotation((Best->GetMesh()->GetBoneLocation(TEXT("spine_02")) - Eye).Rotation());
+				SetControlRotation((Best->GetMesh()->GetBoneLocation(AimBone) - Eye).Rotation());
 			}
 		}), 0.02f, true);
 	}
@@ -548,6 +585,16 @@ void AZSPlayerController::ZSZombieInfo()
 			}
 		}
 		const UZSHealthComponent* HC = UZSHealthComponent::FindOn(Z);
+		static TSet<FString> Dumped;
+		if (Z->GetMesh() && Z->GetMesh()->GetPhysicsAsset() && !Dumped.Contains(GetNameSafe(Z->GetMesh()->GetSkeletalMeshAsset())) && (Dumped.Add(GetNameSafe(Z->GetMesh()->GetSkeletalMeshAsset())), true))
+		{
+			FString Bodies;
+			for (const USkeletalBodySetup* BS : Z->GetMesh()->GetPhysicsAsset()->SkeletalBodySetups)
+			{
+				if (BS) { Bodies += BS->BoneName.ToString() + TEXT(" "); }
+			}
+			UE_LOG(LogZS, Warning, TEXT("Zombie mesh %s bodies: %s"), *GetNameSafe(Z->GetMesh()->GetSkeletalMeshAsset()), *Bodies);
+		}
 		UE_LOG(LogZS, Warning, TEXT("Zombie %s: dist %.0f state %d speed %.0f %s hp %.0f drift %.0f at %s"), *Z->GetName(),
 			P ? FVector::Dist(P->GetActorLocation(), Z->GetActorLocation()) : -1.f, (int32)Z->GetZombieState(),
 			Z->GetVelocity().Size2D(), Z->IsDirectChasing() ? TEXT("DIRECT") : TEXT("NAV"), HC ? HC->GetHealth() : -1.f, Drift, *Z->GetActorLocation().ToCompactString());

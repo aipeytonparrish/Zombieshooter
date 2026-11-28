@@ -85,10 +85,10 @@ public:
 
 	// ---- Tuning (per type; set in ApplyTypeDefaults, override in Blueprint children) ----
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ZS|Zombie")
-	float WalkerHealth = 110.f;
+	float WalkerHealth = 70.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ZS|Zombie")
-	float RunnerHealth = 75.f;
+	float RunnerHealth = 50.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ZS|Zombie")
 	FVector2D WalkerSpeedRange = FVector2D(95.f, 140.f);
@@ -109,7 +109,7 @@ public:
 
 	/** Chance a non-lethal hit makes the zombie flinch (headshots always do). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ZS|Zombie")
-	float FlinchChance = 0.35f;
+	float FlinchChance = 0.6f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ZS|Zombie")
 	float FlinchCooldown = 1.2f;
@@ -286,9 +286,9 @@ private:
 	void StartPhysicalHit(FName Bone, const FVector& Direction, float Damage);
 	void UpdatePhysicalHit(float DeltaSeconds);
 	void StopPhysicalHit();
-	FName HitReactRoot = NAME_None;
 	float HitReactAlpha = 0.f;
-	float HitReactPeak = 0.f;
+	FRotator Jolt = FRotator::ZeroRotator;
+	FRotator JoltVel = FRotator::ZeroRotator;
 
 	static int32 LiveCount;
 };

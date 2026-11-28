@@ -337,6 +337,12 @@ void UZSMovementComponent::HandleCrouchPressed(bool bToggleMode)
 
 void UZSMovementComponent::HandleCrouchReleased(bool bToggleMode)
 {
+	if (!bToggleMode && IsSliding())
+	{
+		// Apex-style: a tap is a full slide. Letting go only means "stand up when it ends".
+		bStandAfterSlide = true;
+		return;
+	}
 	if (!bToggleMode)
 	{
 		bWantsToCrouch = false;
@@ -514,6 +520,7 @@ bool UZSMovementComponent::CanSlide() const
 void UZSMovementComponent::EnterSlide()
 {
 	bWantsToCrouch = true;
+	bStandAfterSlide = false;
 	if (!IsCrouching())
 	{
 		// Crouch while still walking so the capsule keeps its feet on the floor.
@@ -573,7 +580,11 @@ void UZSMovementComponent::PhysSlide(float DeltaTime, int32 Iterations)
 	FHitResult Surface;
 	if (!FindSlideSurface(Surface))
 	{
-		// Slid off a ledge: keep momentum into the air, still crouched (slide can resume on landing).
+		// Slid off a ledge: keep momentum into the air, still crouched (slide can resume on landing) unless crouch was let go.
+		if (bStandAfterSlide)
+		{
+			bWantsToCrouch = false;
+		}
 		SetMovementMode(MOVE_Falling);
 		StartNewPhysics(DeltaTime, Iterations);
 		return;
@@ -581,7 +592,7 @@ void UZSMovementComponent::PhysSlide(float DeltaTime, int32 Iterations)
 
 	if (GetHorizontalSpeed() < SlideMinSpeed)
 	{
-		ExitSlide(bWantsToSprint && IsMovingForward(SprintMaxAngle));
+		ExitSlide(bStandAfterSlide || (bWantsToSprint && IsMovingForward(SprintMaxAngle)));
 		StartNewPhysics(DeltaTime, Iterations);
 		return;
 	}

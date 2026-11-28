@@ -22,6 +22,12 @@ public:
 	static bool BloodEnabled() { return GetGoreLevel() >= 1; }
 	static bool DismemberEnabled() { return GetGoreLevel() >= 2; }
 
+	/**
+	 * Where a bone's joint really is. A hidden (severed) bone drops out of the animated pose and keeps a stale transform
+	 * from the moment it was hidden, so it's rebuilt from the nearest visible ancestor plus reference-pose offsets.
+	 */
+	static FTransform JointTransform(USkeletalMeshComponent* Mesh, int32 BoneIndex);
+
 	/** Burst of flesh chunks. */
 	void SpawnGibs(const FVector& Location, const FVector& Direction, int32 Count, float Scale = 1.f);
 	/** The real body part flies off: a copy of the zombie's mesh showing only Bone and what hangs off it (head, forearm,

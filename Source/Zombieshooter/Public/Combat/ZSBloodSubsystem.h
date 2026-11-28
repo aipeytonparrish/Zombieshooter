@@ -85,6 +85,7 @@ private:
 		float Opacity = 1.f;
 		float Stretch = 0.f;      // length scale from speed (drops / sparks)
 		EKind Kind = EKind::Puff;
+		bool bFresh = true;       // not aged on its spawn frame (short flashes must be drawn at least once)
 	};
 
 	struct FDecalSlot

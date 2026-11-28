@@ -1047,7 +1047,7 @@ void UZSWeaponComponent::TraceBullet(const FVector& Start, const FVector& Direct
 		AActor* HitActor = Hit.GetActor();
 		UZSHealthComponent* Health = UZSHealthComponent::FindOn(HitActor);
 
-		if (Health && Health->IsDead())
+		if (Health && Health->IsDead() && HitActor->IsA<AZSZombieBase>())
 		{
 			// A corpse (or a body still falling): a splash of blood, and the bullet carries on at full strength. Corpses
 			// used to cost a penetration and 40% damage, so a pile of bodies could swallow shots at the live zombie behind.

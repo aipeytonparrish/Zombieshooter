@@ -204,6 +204,28 @@ void UZSGoreSubsystem::SpawnSeveredPart(USkeletalMeshComponent* Source, FName Bo
 	Severed.Add(S);
 }
 
+FTransform UZSGoreSubsystem::JointTransform(USkeletalMeshComponent* Mesh, int32 BoneIndex)
+{
+	if (!Mesh || !Mesh->GetSkeletalMeshAsset() || BoneIndex == INDEX_NONE)
+	{
+		return Mesh ? Mesh->GetComponentTransform() : FTransform::Identity;
+	}
+	const FReferenceSkeleton& Ref = Mesh->GetSkeletalMeshAsset()->GetRefSkeleton();
+	TArray<int32, TInlineAllocator<8>> Chain;   // hidden bones from BoneIndex up, stopping below the first visible one
+	int32 Live = BoneIndex;
+	while (Live != INDEX_NONE && Mesh->IsBoneHidden(Live))
+	{
+		Chain.Add(Live);
+		Live = Ref.GetParentIndex(Live);
+	}
+	FTransform T = Live != INDEX_NONE ? Mesh->GetBoneTransform(Live) : Mesh->GetComponentTransform();
+	for (int32 i = Chain.Num() - 1; i >= 0; --i)
+	{
+		T = Ref.GetRefBonePose()[Chain[i]] * T;
+	}
+	return T;
+}
+
 void UZSGoreSubsystem::AddStump(USkeletalMeshComponent* Mesh, FName Bone, float Duration)
 {
 	if (BloodEnabled() && Mesh)
@@ -252,11 +274,17 @@ void UZSGoreSubsystem::Tick(float DeltaTime)
 		{
 			// Pulses, like a heartbeat, weakening over time.
 			S.NextSpurt = 0.18f;
-			const FTransform T = Mesh->GetSocketTransform(S.Bone);
-			const FName Parent = Mesh->GetParentBone(S.Bone);
-			const FVector Out = (T.GetLocation() - Mesh->GetSocketLocation(Parent)).GetSafeNormal();
+			// A hidden (severed) bone's own transform is stale (frozen where it was cut, up to a metre off the body now).
+			const int32 BoneIndex = Mesh->GetBoneIndex(S.Bone);
+			const int32 ParentIndex = Mesh->GetBoneIndex(Mesh->GetParentBone(S.Bone));
+			if (BoneIndex == INDEX_NONE || ParentIndex == INDEX_NONE)
+			{
+				continue;
+			}
+			const FVector Joint = JointTransform(Mesh, BoneIndex).GetLocation();
+			const FVector Out = (Joint - JointTransform(Mesh, ParentIndex).GetLocation()).GetSafeNormal();
 			const float Pulse = FMath::Clamp(S.TimeLeft, 0.3f, 1.2f);
-			Blood->SpawnDrip(T.GetLocation(), (Out + FVector(0, 0, 0.35f)).GetSafeNormal() * 260.f * Pulse, FMath::RoundToInt(3.f + 4.f * Pulse));
+			Blood->SpawnDrip(Joint, (Out + FVector(0, 0, 0.35f)).GetSafeNormal() * 260.f * Pulse, FMath::RoundToInt(3.f + 4.f * Pulse));
 		}
 	}
 	for (int32 i = Severed.Num() - 1; i >= 0; --i)

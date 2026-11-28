@@ -470,8 +470,8 @@ if paint:
         for k in range(beds):
             hk("Market/SM_StackClothes_0%d" % (1 + (i + k) % 4), tx - 120 + k * 150, ty - 20, 20 * k, z=ROOF + 16)
 # Spare chairs and crates around the fire for the people who don't fit on the benches.
-for k in range(3):
-    a = math.radians(30 + k * 115)
+for k, deg in enumerate((30, 150, 215)):
+    a = math.radians(deg)
     hk("Market/SM_HK_Chair_01", cx + math.cos(a) * 470, cy + math.sin(a) * 470, math.degrees(a) + 180)
 hk("Props/SM_PilePallets_01", -HX * 0.2, -HY * 0.75, 0)
 hk("Trash/SM_CardboardBox_02", -HX * 0.2 + 70, -HY * 0.75 + 60, 25)

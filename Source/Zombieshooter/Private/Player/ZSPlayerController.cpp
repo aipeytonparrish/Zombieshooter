@@ -186,6 +186,22 @@ void AZSPlayerController::BeginPlay()
 //   -ZSAutoRange       teleport to the shooting range first
 //   -ZSAutoADS         hold aim-down-sights        -ZSAutoFire   hold the trigger
 //   -ZSAutoWeapon=1    switch to weapon slot 1     -ZSAutoPitch=-10 / -ZSAutoYaw=20  look offset
+
+#if !UE_BUILD_SHIPPING
+namespace
+{
+	/** Dev aim bot: a severed (hidden) bone's transform is junk, so aim at its nearest visible parent. */
+	FName VisibleAimBone(USkeletalMeshComponent* M, FName Bone)
+	{
+		while (!Bone.IsNone() && M->IsBoneHiddenByName(Bone))
+		{
+			Bone = M->GetParentBone(Bone);
+		}
+		return Bone.IsNone() ? FName(TEXT("pelvis")) : Bone;
+	}
+}
+#endif
+
 void AZSPlayerController::StartAutoShotIfRequested()
 {
 #if !UE_BUILD_SHIPPING
@@ -501,13 +517,23 @@ void AZSPlayerController::StartAutoShotIfRequested()
 				if (It->IsDead() || D >= BestD) { continue; }
 				FHitResult Hit;
 				FCollisionQueryParams Q(SCENE_QUERY_STAT(ZSAutoAim), false, Char);
-				const FVector Chest = It->GetMesh()->GetBoneLocation(AimBone);
-				if (GetWorld()->LineTraceSingleByChannel(Hit, Eye, Chest, ECC_Visibility, Q) && Hit.GetActor() != *It) { continue; }   // behind a wall
+				const FVector Chest = It->GetMesh()->GetBoneLocation(VisibleAimBone(It->GetMesh(), AimBone));
+				if (GetWorld()->LineTraceSingleByChannel(Hit, Eye, Chest, ECC_Visibility, Q) && Hit.GetActor() != *It)
+				{
+					static double LastLog = 0.0;
+					if (D < 400.f && FPlatformTime::Seconds() - LastLog > 2.0)
+					{
+						LastLog = FPlatformTime::Seconds();
+						UE_LOG(LogZS, Warning, TEXT("AutoAim: %s at %.0f cm hidden by %s/%s (%.0f cm short of %s, bone z %.0f, capsule z %.0f)"), *It->GetName(), D,
+							*GetNameSafe(Hit.GetActor()), *GetNameSafe(Hit.GetComponent()), FVector::Dist(Hit.ImpactPoint, Chest), *AimBone.ToString(), Chest.Z, It->GetActorLocation().Z);
+					}
+					continue;   // behind a wall
+				}
 				Best = *It; BestD = D;
 			}
 			if (Best)
 			{
-				SetControlRotation((Best->GetMesh()->GetBoneLocation(AimBone) - Eye).Rotation());
+				SetControlRotation((Best->GetMesh()->GetBoneLocation(VisibleAimBone(Best->GetMesh(), AimBone)) - Eye).Rotation());
 			}
 		}), 0.02f, true);
 	}

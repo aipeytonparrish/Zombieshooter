@@ -875,7 +875,7 @@ void AZSZombieBase::AddWound(const FVector& WorldPoint, FName Bone, float Radius
 		FVector4& W = Wounds[i];
 		if (FVector::Dist(FVector(W.X, W.Y, W.Z), P) < W.W * 0.6f)
 		{
-			W.W = FMath::Min(W.W + Radius * 0.15f, 12.f);
+			W.W = FMath::Max(W.W, FMath::Min(W.W + Radius * 0.15f, 12.f));
 			MID->SetScalarParameterValue(*FString::Printf(TEXT("R%d"), i), W.W);
 			return;
 		}
@@ -928,7 +928,7 @@ void AZSZombieBase::BuildHitCapsules()
 	Seg(TEXT("pelvis"), TEXT("spine_01"), 15.f);
 	Seg(TEXT("spine_01"), TEXT("spine_02"), 15.f);
 	Seg(TEXT("spine_02"), TEXT("spine_03"), 16.f);
-	Seg(TEXT("spine_03"), TEXT("neck_01"), 15.f);
+	Seg(TEXT("spine_03"), TEXT("neck_01"), 11.f);
 	Seg(TEXT("neck_01"), TEXT("head"), 6.5f);
 	Tip(TEXT("neck_01"), TEXT("head"), 3.f, 15.f, 10.f);
 	for (const TCHAR* Side : { TEXT("_l"), TEXT("_r") })
@@ -951,8 +951,7 @@ bool AZSZombieBase::TraceBody(const FVector& Start, const FVector& End, FHitResu
 	{
 		return false;
 	}
-	const UCapsuleComponent* Cap = GetCapsuleComponent();
-	if (FMath::PointDistToSegment(Cap->GetComponentLocation(), Start, End) > Cap->GetScaledCapsuleHalfHeight() + 80.f)
+	if (FMath::PointDistToSegment(M->Bounds.Origin, Start, End) > M->Bounds.SphereRadius + 20.f)
 	{
 		return false;   // nowhere near
 	}
@@ -993,11 +992,11 @@ bool AZSZombieBase::TraceBody(const FVector& Start, const FVector& End, FHitResu
 		FVector A = PB, B;
 		if (C.To != INDEX_NONE)
 		{
-			B = M->GetBoneTransform(C.To).GetLocation();
+			B = UZSGoreSubsystem::JointTransform(M, C.To).GetLocation();   // the cut end of a stump, not the bone's stale spot
 		}
 		else
 		{
-			const FVector D = (PB - M->GetBoneTransform(C.From).GetLocation()).GetSafeNormal();
+			const FVector D = (PB - UZSGoreSubsystem::JointTransform(M, C.From).GetLocation()).GetSafeNormal();
 			A = PB + D * C.Off0 * Scale;
 			B = PB + D * C.Off1 * Scale;
 		}
@@ -1011,7 +1010,7 @@ bool AZSZombieBase::TraceBody(const FVector& Start, const FVector& End, FHitResu
 		}
 		// Back up from the closest approach to roughly where the ray enters the capsule.
 		const float SinT = FMath::Max(0.35f, FVector::CrossProduct(Dir, (B - A).GetSafeNormal()).Size());
-		const float T = FMath::Max(0.f, FVector::Dist(Start, OnRay) - FMath::Sqrt(R * R - DistSq) / SinT);
+		const float T = FMath::Max(0.f, FVector::Dist(Start, OnRay) - FMath::Min(FMath::Sqrt(R * R - DistSq) / SinT, R));
 		if (T < Best)
 		{
 			Best = T;
@@ -1217,7 +1216,7 @@ void AZSZombieBase::BecomeCrawler(bool bHideLegs)
 	{
 		for (const TCHAR* Leg : { TEXT("calf_l"), TEXT("calf_r") })
 		{
-			MeshComp->HideBoneByName(Leg, PBO_None);
+			MeshComp->HideBoneByName(Leg, PBO_Term);   // no invisible frozen calves stopping bullets
 			Severed.Add(Leg);
 		}
 	}

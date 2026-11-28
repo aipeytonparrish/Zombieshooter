@@ -662,3 +662,33 @@ used). It's the game's default map and where runs return to.
   spawn point overlapped geometry (they now nudge free), and a first-frame GPU hang in Nanite shadow culling.
 - `r.Nanite.Tessellation=0` (Config/DefaultEngine.ini): the hang's last pass was Nanite tessellation, which nothing of
   ours uses. Keep local lights shadowless in the big maps for the same reason.
+
+## Hits, wounds and the camp (this pass)
+
+- **Every body shot counts.** Bullets test a set of capsules built from the zombie's skeleton (torso, shoulders,
+  arms, legs, head) as well as its physics asset, which has gaps (no shoulder bodies, a thin torso). Things that used
+  to swallow shots without a hit no longer block bullets: pickup trigger spheres (75 cm, dropped where zombies die),
+  flying gibs, flung door boards, spit. Corpses take a splash of blood but don't cost the bullet its penetration or
+  damage. `zs.LogHits 1` logs every hit, including the ones only the skeleton test caught ("Skeleton hit ...").
+- **Wounds.** Blood appears where each bullet went in and where it came out, running down from the wound; up to 8 wounds
+  per zombie, nearby hits open the same wound wider. (This replaces the full-body soak that looked the same on every
+  zombie.) `M_ZS_BloodOverlay` also carries the special zombies' rim glow. Rebuild only it with
+  `create_gore_fx.py overlay`.
+- **Headshots:** a killing shot to the head always takes the head off.
+- **Muzzle flash:** our own short white-hot spark star. The pack's Niagara flame rendered as a big pink cloud in
+  daylight; `zs.MuzzleFX 1` brings the pack's flame back, `2` its smoke too.
+- **The camp** (`create_rooftop_map.py`, Hong Kong city pack props): stations are real furniture (gunsmith's bench with
+  the rifle, trader's counter of produce and rounds, a clothes-rack wardrobe, ops desk and chalkboard, planning table);
+  a dining corner under paper lanterns, a produce stall and cart, a kitchen table by the fire, a scavenge store of
+  pallets and boxes, a washing line, a bike, planters, lamps under the tarps. Nadia (cook) and Eli (scavenger) joined.
+- Test helpers: `-ZSAutoBurstsAt=6` (hold fire until 6 s), `-ZSAutoZombieDist=450` (spawn test zombies that close).
+- **Severed limbs:** a hidden (cut) bone drops out of the animated pose and keeps a stale transform, frozen where it was
+  cut. Never read one directly: `UZSGoreSubsystem::JointTransform` rebuilds the joint from the nearest visible
+  ancestor. Hit capsules that end at a cut bone (a thigh after the calf is gone, an upper arm after the forearm) and
+  stump blood both use it. Crawler legs are hidden with their physics bodies terminated (invisible calves used to stop
+  bullets).
+- **Station signs** turn to face the player (a fixed sign was edge-on from half the camp).
+- **Playtest, 2026-11-28:** four 15-minute AutoPlay soaks on New York (aimed at chest, pelvis with the P9, shoulder,
+  thigh), up to round 10 with 270 kills: no crashes, 90-200 fps. Plus 10 load loops on New York and the Rooftop. The
+  one stall was the test bot aiming at a cut-off leg's stale bone (`-ZSAutoAim` now aims at the nearest visible
+  parent). The Rooftop's rare first-frame Nanite shadow hang came back once in 23 loads after the camp dressing.

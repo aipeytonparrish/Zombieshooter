@@ -14,6 +14,8 @@
 #include "Core/ZSCharacterCatalog.h"
 #include "Profile/ZSProfileSubsystem.h"
 #include "Misc/Paths.h"
+#include "Kismet/GameplayStatics.h"
+#include "Camera/PlayerCameraManager.h"
 
 namespace
 {
@@ -112,7 +114,7 @@ namespace
 
 AZSStation::AZSStation()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;   // the sign turns to face the player (a fixed sign read edge-on from half the camp)
 
 	Collision = CreateDefaultSubobject<UBoxComponent>(TEXT("Collision"));
 	Collision->SetBoxExtent(FVector(90.f, 55.f, 50.f));
@@ -195,6 +197,16 @@ void AZSStation::OnConstruction(const FTransform& Transform)
 	ApplyVisuals();
 }
 
+void AZSStation::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	if (const APlayerCameraManager* Cam = UGameplayStatics::GetPlayerCameraManager(this, 0))
+	{
+		const FVector ToCam = Cam->GetCameraLocation() - Sign->GetComponentLocation();
+		Sign->SetWorldRotation(FRotator(0.f, ToCam.Rotation().Yaw, 0.f));   // text faces its +X
+	}
+}
+
 void AZSStation::BeginPlay()
 {
 	Super::BeginPlay();
@@ -248,6 +260,24 @@ void AZSStation::ApplyVisuals()
 	Preview->SetVisibility(Type == EZSStationType::Character);
 	UStaticMesh* WoodTable = HK(TEXT("Props/SM_TableRestaurant_01"));
 	UMaterialInterface* Wood = Mat(TEXT("/Game/MS_NewYorkCityKitbash_Assets/Materials/M_Wood01.M_Wood01"));   // planks, not the pack's orange
+	if (!WoodTable)
+	{
+		// Hong Kong pack missing: the old plain workbench.
+		Table->EmptyOverrideMaterials();
+		Table->SetStaticMesh(Mesh(TEXT("/Engine/BasicShapes/Cube.Cube")));
+		Table->SetRelativeLocationAndRotation(FVector(0.f, 0.f, -5.f), FRotator::ZeroRotator);
+		Table->SetRelativeScale3D(Type == EZSStationType::MapTable ? FVector(2.4f, 1.6f, 0.9f) : FVector(1.8f, 1.f, 0.9f));
+		Table->SetMaterial(0, KitOrPaint(this, Steel, FLinearColor(0.08f, 0.07f, 0.06f)));
+		Collision->SetBoxExtent(Type == EZSStationType::MapTable ? FVector(120.f, 80.f, 50.f) : FVector(90.f, 50.f, 50.f));
+		if (Type == EZSStationType::MapTable)
+		{
+			PropA->SetStaticMesh(Mesh(TEXT("/Engine/BasicShapes/Plane.Plane")));
+			PropA->SetRelativeLocation(FVector(0.f, 0.f, 41.f));
+			PropA->SetRelativeScale3D(FVector(2.f, 1.3f, 1.f));
+			PropA->SetMaterial(0, KitOrPaint(this, TEXT(""), FLinearColor(0.05f, 0.2f, 0.08f), 0.6f));
+		}
+		return;
+	}
 	switch (Type)
 	{
 	case EZSStationType::Armory:
@@ -263,7 +293,7 @@ void AZSStation::ApplyVisuals()
 		PropA->SetRelativeLocationAndRotation(FVector(0.f, -10.f, Top + Lift + 4.f), Flat);
 		PropB->SetStaticMesh(Mesh(TEXT("/Game/ZS_Imported/Weapons/RD704/SM_RD704_Stock.SM_RD704_Stock")));
 		PropB->SetRelativeLocationAndRotation(FVector(0.f, -10.f, Top + Lift + 4.f), Flat);
-		Fit(PropC, Mesh(TEXT("/Game/ZS_Imported/Props/AmmoBoxes/SM_Ammobox_556_NATO_Closed.SM_Ammobox_556_NATO_Closed")), FVector(40.f, 0.f, 0.f), true, FVector2D(10.f, 62.f), 15.f, Top);
+		Fit(PropC, Mesh(TEXT("/Game/ZS_Imported/Props/AmmoBoxes/SM_Ammobox_556_NATO_Closed.SM_Ammobox_556_NATO_Closed")), FVector(40.f, 0.f, 0.f), true, FVector2D(-62.f, 26.f), 15.f, Top);
 		Collision->SetBoxExtent(FVector(90.f, 50.f, 50.f));
 		break;
 	}
@@ -312,14 +342,5 @@ void AZSStation::ApplyVisuals()
 		Collision->SetBoxExtent(FVector(120.f, 80.f, 50.f));
 		break;
 	}
-	}
-	if (!Table->GetStaticMesh())
-	{
-		// Pack missing: the old plain workbench.
-		Table->SetStaticMesh(Mesh(TEXT("/Engine/BasicShapes/Cube.Cube")));
-		Table->SetRelativeLocation(FVector(0.f, 0.f, -5.f));
-		Table->SetRelativeRotation(FRotator::ZeroRotator);
-		Table->SetRelativeScale3D(Type == EZSStationType::MapTable ? FVector(2.4f, 1.6f, 0.9f) : FVector(1.8f, 1.f, 0.9f));
-		Table->SetMaterial(0, KitOrPaint(this, Steel, FLinearColor(0.08f, 0.07f, 0.06f)));
 	}
 }

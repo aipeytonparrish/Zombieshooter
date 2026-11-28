@@ -53,7 +53,7 @@ void AZSKitInstances::Rebuild()
 			const TArray<FStaticMaterial>& Slots = Batch.Mesh->GetStaticMaterials();
 			for (int32 i = 0; Steel && i < Slots.Num(); ++i)
 			{
-				if (Slots[i].MaterialInterface && Slots[i].MaterialInterface->GetName().Contains(TEXT("Rust")))
+				if (Slots[i].MaterialInterface && Slots[i].MaterialInterface->GetName() == TEXT("M_Rust_Heavy"))
 				{
 					C->SetMaterial(i, Steel);
 				}

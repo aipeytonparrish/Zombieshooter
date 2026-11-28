@@ -589,7 +589,7 @@ void UZSBloodSubsystem::Tick(float DeltaTime)
 	for (int32 i = Particles.Num() - 1; i >= 0; --i)
 	{
 		FParticle& P = Particles[i];
-		P.Life += DeltaTime;
+		if (P.bFresh) { P.bFresh = false; } else { P.Life += DeltaTime; }
 		if (P.Life >= P.MaxLife)
 		{
 			Particles.RemoveAtSwap(i, EAllowShrinking::No);

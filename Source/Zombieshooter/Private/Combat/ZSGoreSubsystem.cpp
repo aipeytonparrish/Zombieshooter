@@ -4,6 +4,8 @@
 #include "UI/ZSHUD.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/PoseableMeshComponent.h"
+#include "Engine/SkinnedAssetCommon.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
@@ -90,6 +92,98 @@ void UZSGoreSubsystem::SpawnGibs(const FVector& Location, const FVector& Directi
 	}
 }
 
+void UZSGoreSubsystem::SpawnSeveredPart(USkeletalMeshComponent* Source, FName Bone, const FVector& Direction)
+{
+	if (!DismemberEnabled() || !Source || !Source->GetSkinnedAsset())
+	{
+		return;
+	}
+	const int32 CutIndex = Source->GetBoneIndex(Bone);
+	if (CutIndex == INDEX_NONE)
+	{
+		return;
+	}
+	UWorld* World = GetWorld();
+	if (!Host)
+	{
+		FActorSpawnParameters P;
+		P.ObjectFlags |= RF_Transient;
+		Host = World->SpawnActor<AActor>(AActor::StaticClass(), FTransform::Identity, P);
+		Host->SetRootComponent(NewObject<USceneComponent>(Host, TEXT("Root")));
+		Host->GetRootComponent()->RegisterComponent();
+	}
+	while (Gibs.Num() >= MaxGibs)
+	{
+		if (UStaticMeshComponent* Old = Gibs[0].Comp.Get()) { Old->DestroyComponent(); }
+		if (UPoseableMeshComponent* OldPart = Gibs[0].Part.Get()) { OldPart->DestroyComponent(); }
+		Gibs.RemoveAt(0);
+	}
+
+	// Where the part is: from the cut bone towards the end of its chain.
+	const TArray<FTransform>& CS = Source->GetComponentSpaceTransforms();
+	const FTransform CompWorld = Source->GetComponentTransform();
+	const FReferenceSkeleton& Ref = Source->GetSkinnedAsset()->GetRefSkeleton();
+	const int32 NumBones = Ref.GetNum();
+	auto InSubtree = [&Ref, CutIndex](int32 Index)
+	{
+		for (int32 I = Index; I != INDEX_NONE; I = Ref.GetParentIndex(I))
+		{
+			if (I == CutIndex) { return true; }
+		}
+		return false;
+	};
+	FVector Centre = FVector::ZeroVector;
+	int32 Count = 0;
+	for (int32 i = 0; i < NumBones && i < CS.Num(); ++i)
+	{
+		if (InSubtree(i)) { Centre += CompWorld.TransformPosition(CS[i].GetLocation()); ++Count; }
+	}
+	Centre = Count > 0 ? Centre / Count : CompWorld.TransformPosition(CS[CutIndex].GetLocation());
+	const bool bHead = Bone == TEXT("head");
+
+	// Physics carrier: an invisible ball the part rides on.
+	static UStaticMesh* Sphere = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	UStaticMeshComponent* Carrier = NewObject<UStaticMeshComponent>(Host, NAME_None, RF_Transient);
+	Carrier->SetStaticMesh(Sphere);
+	const float R = bHead ? 0.2f : 0.16f;
+	Carrier->SetWorldScale3D(FVector(R));
+	Carrier->SetWorldLocation(Centre);
+	Carrier->SetVisibility(false);
+	Carrier->SetCollisionProfileName(TEXT("PhysicsActor"));
+	Carrier->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	Carrier->SetCastShadow(false);
+	Carrier->SetMobility(EComponentMobility::Movable);
+	Carrier->RegisterComponent();
+
+	// The part: the zombie's own mesh, posed like it was, every bone outside the part shrunk to nothing.
+	UPoseableMeshComponent* Part = NewObject<UPoseableMeshComponent>(Host, NAME_None, RF_Transient);
+	Part->SetSkinnedAssetAndUpdate(Source->GetSkinnedAsset());
+	for (int32 m = 0; m < Source->GetNumMaterials(); ++m) { Part->SetMaterial(m, Source->GetMaterial(m)); }
+	Part->SetOverlayMaterial(Source->GetOverlayMaterial());
+	Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Part->SetWorldTransform(CompWorld);
+	Part->RegisterComponent();
+	const float Gone = 0.001f;
+	for (int32 i = 0; i < NumBones && i < CS.Num(); ++i)
+	{
+		FTransform T = CS[i];
+		T.SetScale3D(InSubtree(i) ? CS[i].GetScale3D() : FVector(Gone));
+		Part->SetBoneTransformByName(Ref.GetBoneName(i), T, EBoneSpaces::ComponentSpace);
+	}
+	Part->AttachToComponent(Carrier, FAttachmentTransformRules::KeepWorldTransform);
+
+	Carrier->SetSimulatePhysics(true);
+	Carrier->SetMassOverrideInKg(NAME_None, bHead ? 5.f : 3.f, true);
+	const FVector V = (Direction.GetSafeNormal() * 0.8f + FMath::VRand() * 0.35f + FVector(0.f, 0.f, 0.6f)).GetSafeNormal() * FMath::FRandRange(300.f, 560.f);
+	Carrier->SetPhysicsLinearVelocity(V);
+	Carrier->SetPhysicsAngularVelocityInDegrees(FMath::VRand() * 600.f);
+	FGib G;
+	G.Comp = Carrier;
+	G.Life = 25.f;
+	G.Part = Part;
+	Gibs.Add(G);
+}
+
 void UZSGoreSubsystem::AddStump(USkeletalMeshComponent* Mesh, FName Bone, float Duration)
 {
 	if (BloodEnabled() && Mesh)
@@ -152,6 +246,7 @@ void UZSGoreSubsystem::Tick(float DeltaTime)
 		if (!C || Gibs[i].Life <= 0.f)
 		{
 			if (C) { C->DestroyComponent(); }
+			if (UPoseableMeshComponent* P = Gibs[i].Part.Get()) { P->DestroyComponent(); }
 			Gibs.RemoveAtSwap(i);
 			continue;
 		}

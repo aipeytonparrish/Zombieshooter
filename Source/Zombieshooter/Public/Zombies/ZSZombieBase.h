@@ -287,6 +287,10 @@ private:
 	void UpdatePhysicalHit(float DeltaSeconds);
 	void StopPhysicalHit();
 	float HitReactAlpha = 0.f;
+	/** Wet blood soaking through the clothes as the zombie takes damage (M_ZS_BloodOverlay on the mesh). */
+	void AddBloodiness(float Amount);
+	UPROPERTY(Transient) TObjectPtr<class UMaterialInstanceDynamic> BloodMID;
+	float Bloodiness = 0.f;
 	FRotator Jolt = FRotator::ZeroRotator;
 	FRotator JoltVel = FRotator::ZeroRotator;
 

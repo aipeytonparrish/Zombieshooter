@@ -670,6 +670,7 @@ float AZSZombieBase::TakeDamage(float DamageAmount, const FDamageEvent& DamageEv
 		{
 			Blood->SpawnHitBlood(LastHitLocation, LastHitDirection, bLastHitHead ? 1.6f : 1.f);
 		}
+		AddBloodiness(0.05f + DamageAmount / FMath::Max(1.f, Health->MaxHealth) * 0.3f);
 	}
 	LastHitDamage = DamageAmount;
 	const bool bLethal = DamageAmount >= Health->GetHealth();
@@ -784,6 +785,27 @@ void AZSZombieBase::HandleDeath(UZSHealthComponent* InHealth, AController* Kille
 	}), 1.4f, false);
 
 	SetLifeSpan(CorpseLifetime);
+}
+
+void AZSZombieBase::AddBloodiness(float Amount)
+{
+	if (!UZSGoreSubsystem::BloodEnabled())
+	{
+		return;
+	}
+	if (!BloodMID)
+	{
+		UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ZS/Materials/M_ZS_BloodOverlay.M_ZS_BloodOverlay"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+		if (!Base)
+		{
+			return;
+		}
+		BloodMID = UMaterialInstanceDynamic::Create(Base, this);
+		BloodMID->SetScalarParameterValue(TEXT("Seed"), FMath::FRandRange(0.f, 100.f));
+		GetMesh()->SetOverlayMaterial(BloodMID);
+	}
+	Bloodiness = FMath::Min(0.42f, Bloodiness + Amount);
+	BloodMID->SetScalarParameterValue(TEXT("Amount"), Bloodiness);
 }
 
 void AZSZombieBase::StartPhysicalHit(FName Bone, const FVector& Direction, float Damage)
@@ -1241,11 +1263,15 @@ void AZSZombieBase::Sever(FName Bone, const FVector& Direction)
 	Severed.Add(Bone);
 	UE_LOG(LogZS, Log, TEXT("Severed %s on %s"), *Bone.ToString(), *GetName());
 	const FVector Where = MeshComp->GetSocketLocation(Bone);
+	if (UZSGoreSubsystem* Gore = GetWorld()->GetSubsystem<UZSGoreSubsystem>())
+	{
+		Gore->SpawnSeveredPart(MeshComp, Bone, Direction);   // before hiding it: the copy takes the current pose
+	}
 	MeshComp->HideBoneByName(Bone, PBO_Term);
 	if (UZSGoreSubsystem* Gore = GetWorld()->GetSubsystem<UZSGoreSubsystem>())
 	{
 		const bool bHead = Bone == TEXT("head");
-		Gore->SpawnGibs(Where, Direction, bHead ? 8 : 4, bHead ? 1.1f : 0.9f);
+		Gore->SpawnGibs(Where, Direction, bHead ? 3 : 1, bHead ? 0.6f : 0.5f);   // a few small bits, the real part flies off
 		Gore->AddStump(MeshComp, Bone, bHead ? 3.f : 2.2f);
 		Gore->SplatterNearCamera(Where, 380.f, bHead ? 0.7f : 0.45f);
 	}

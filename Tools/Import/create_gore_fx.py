@@ -279,6 +279,47 @@ def build_camo():
     return mat
 
 
+def build_blood_overlay():
+    """Zombies soak with blood as they're shot (mesh overlay). Blotches pinned to the body (pre-skinned position), so
+    they move with it; Amount 0..1 grows them, Seed varies the pattern per zombie. Dark, wet, glossy."""
+    mat = fresh_material("M_ZS_BloodOverlay")
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    # Volumetric lighting: no sky-reflection sheen (surface lighting made the blotches read pink-white in the sun).
+    mat.set_editor_property("translucency_lighting_mode", unreal.TranslucencyLightingMode.TLM_VOLUMETRIC_NON_DIRECTIONAL)
+    mat.set_editor_property("used_with_skeletal_mesh", True)
+    pos = expr(mat, unreal.MaterialExpressionPreSkinnedPosition, -1300, 0)
+    seed = scalar(mat, "Seed", 0.0, -1300, 150)
+    sp = expr(mat, unreal.MaterialExpressionAdd, -1100, 50)
+    link(pos, sp, "A")
+    link(seed, sp, "B")
+    n = expr(mat, unreal.MaterialExpressionNoise, -900, 0, scale=0.05, levels=4, output_min=0.0, output_max=1.0)
+    link(sp, n, "Position")
+    amount = scalar(mat, "Amount", 0.0, -900, 250)
+    inv = expr(mat, unreal.MaterialExpressionOneMinus, -700, 250)
+    link(amount, inv)
+    sub_ = expr(mat, unreal.MaterialExpressionSubtract, -550, 100)
+    link(n, sub_, "A")
+    link(inv, sub_, "B")
+    mul = expr(mat, unreal.MaterialExpressionMultiply, -400, 100, const_b=10.0)
+    link(sub_, mul, "A")
+    sat = expr(mat, unreal.MaterialExpressionSaturate, -250, 100)
+    link(mul, sat)
+    op = expr(mat, unreal.MaterialExpressionMultiply, -100, 100, const_b=0.97)
+    link(sat, op, "A")
+    mel.connect_material_property(op, "", unreal.MaterialProperty.MP_OPACITY)
+    # Thicker (deeper into the blotch) = darker, edges a little brighter red.
+    dark = expr(mat, unreal.MaterialExpressionConstant3Vector, -400, -250, constant=unreal.LinearColor(0.018, 0.0, 0.0, 1))
+    red = expr(mat, unreal.MaterialExpressionConstant3Vector, -400, -400, constant=unreal.LinearColor(0.07, 0.003, 0.002, 1))
+    col = expr(mat, unreal.MaterialExpressionLinearInterpolate, -200, -300)
+    link(red, col, "A")
+    link(dark, col, "B")
+    link(sat, col, "Alpha")
+    mel.connect_material_property(col, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    mel.recompile_material(mat)
+    zs.eal.save_loaded_asset(mat)
+    return mat
+
+
 def build_paint():
     mat = fresh_material("M_ZS_Paint")
     color = vector(mat, "Color", unreal.LinearColor(0.5, 0.5, 0.5, 1), -500, -100)
@@ -312,4 +353,5 @@ build_spark()
 build_flesh()
 build_paint()
 build_camo()
+build_blood_overlay()
 zs.log("gore fx: textures + materials created")

@@ -24,6 +24,10 @@ public:
 
 	/** Burst of flesh chunks. */
 	void SpawnGibs(const FVector& Location, const FVector& Direction, int32 Count, float Scale = 1.f);
+	/** The real body part flies off: a copy of the zombie's mesh showing only Bone and what hangs off it (head, forearm,
+	 *  leg...), everything else collapsed to nothing, so the cut reads as a clean cut. */
+	void SpawnSeveredPart(USkeletalMeshComponent* Source, FName Bone, const FVector& Direction);
+
 	/** Blood pumping out of a bone stump for a few seconds. */
 	void AddStump(USkeletalMeshComponent* Mesh, FName Bone, float Duration = 2.5f);
 	/** Screen blood if Location is close to the player's camera. */
@@ -51,6 +55,7 @@ private:
 		float Life = 0.f;
 		float DripTimer = 0.f;
 		bool bSplatted = false;
+		TWeakObjectPtr<class UPoseableMeshComponent> Part;   // severed body part riding on this physics carrier
 	};
 	TArray<FGib> Gibs;
 

@@ -130,8 +130,11 @@ void UZSBloodSubsystem::SpawnHitBlood(const FVector& Location, const FVector& Di
 	const FVector Dir = Direction.GetSafeNormal();
 	const float Gore = UZSGoreSubsystem::DismemberEnabled() ? 1.f : 0.6f;
 
-	// Exit mist: a dense red cloud blown out the back, a smaller puff toward the shooter.
-	const int32 Mists = FMath::RoundToInt((2.f + 1.5f * Intensity) * Gore);
+	// Exit mist: a red puff blown out the back, a smaller one toward the shooter. Capped so sustained fire doesn't
+	// build a pink cloud.
+	int32 LiveMist = 0;
+	for (const FParticle& Pt : Particles) { LiveMist += (Pt.Kind == EKind::Puff && Pt.Color.G < 0.02f && Pt.Color.R > Pt.Color.G * 5.f); }
+	const int32 Mists = LiveMist > 18 ? 0 : FMath::RoundToInt((2.f + 1.f * Intensity) * Gore);
 	for (int32 i = 0; i < Mists; ++i)
 	{
 		FParticle* P = AddParticle(EKind::Puff);
@@ -143,8 +146,8 @@ void UZSBloodSubsystem::SpawnHitBlood(const FVector& Location, const FVector& Di
 		P->MaxLife = FMath::FRandRange(0.25f, 0.5f);
 		P->Drag = 6.f;
 		P->Gravity = 0.25f;
-		P->Opacity = FMath::FRandRange(0.5f, 0.75f);
-		P->Color = MistColor * FMath::FRandRange(0.7f, 1.2f);
+		P->Opacity = FMath::FRandRange(0.35f, 0.55f);
+		P->Color = MistColor * FMath::FRandRange(0.6f, 1.f);
 	}
 	// Droplets: fast, mostly out of the exit side, falling under gravity.
 	const int32 Drops = FMath::RoundToInt((10.f + 12.f * Intensity) * Gore);

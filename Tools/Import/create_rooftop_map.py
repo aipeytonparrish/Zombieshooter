@@ -386,6 +386,96 @@ for prop_name, val in [("color_saturation", unreal.Vector4(1.05, 1.0, 0.95, 1.0)
     s.set_editor_property(prop_name, val)
 ppv.set_editor_property("settings", s)
 
+# ---- Lived-in camp: furniture and clutter from the owner's Hong Kong city pack ------------------------------------
+HKM = "/Game/CityCore_HongKong/Models/%s"
+
+
+def hk(rel, x, y, yaw=0.0, size=None, z=None, shadow=True, folder="Rooftop/Camp", height=None):
+    """A Hong Kong pack prop standing on the roof (or at z). size = target largest footprint side (cm), height = target
+    height (cm); otherwise native scale."""
+    path = HKM % rel
+    s = size_of(path)
+    if s is None:
+        return None
+    scale = 1.0
+    if size:
+        scale = size / max(s[0], s[1])
+    if height:
+        scale = height / s[2]
+    return place(path, x, y, ROOF if z is None else z, yaw, scale, shadow, label="Camp_" + rel.split("/")[-1], folder=folder, ground=z is None)
+
+
+# Dining corner (north-east): round tables with chairs and cups, a string of paper lanterns overhead.
+for i, (tx, ty) in enumerate(((HX * 0.38, HY * 0.52), (HX * 0.56, HY * 0.3), (HX * 0.62, HY * 0.66))):
+    hk("Props/SM_TableRestaurant_01_Round", tx, ty, i * 25)
+    for k in range(3):
+        a = math.radians(i * 40 + k * 120)
+        hk("Props/SM_RestaurantChair_01", tx + math.cos(a) * 70, ty + math.sin(a) * 70, math.degrees(a) + 180)
+    hk("Props/SM_CoffeeCupWithPlate_02", tx + 12, ty - 8, i * 60, z=ROOF + 76)
+lantern = hk("Market/SM_HK_LanternsLamp_01", HX * 0.18, HY * 0.48, 0, z=ROOF + 300, shadow=False)
+for k in range(4):
+    light(HX * 0.18 + 120 + k * 240, HY * 0.48, ROOF + 250, (255, 120, 60), 5, 450)
+for px in (HX * 0.18, HX * 0.18 + 950):
+    p = place(cube, px, HY * 0.48, ROOF + 155, 0, 1.0, label="LanternPole", folder="Rooftop/Camp")
+    if p:
+        p.set_actor_scale3d(unreal.Vector(0.07, 0.07, 3.1))
+
+# Produce stall and a hand cart by the trader (south): what the garden and the scavengers bring in.
+hk("Market/SM_HK_MarketStall_01_A", HX * 0.25, -HY * 0.72, 180, size=170)
+for k, box in enumerate(("Market/SM_BoxPotatos_01", "Market/SM_BoxLimes_01", "Market/SM_BoxBannas_01", "Market/SM_BoxPears_01")):
+    hk(box, HX * 0.25 - 75 + k * 48, -HY * 0.72 + 85, k * 9)
+hk("Market/SM_HK_Market_Cart_01", HX * 0.4, -HY * 0.62, 20, size=130)
+
+# Camp kitchen beside the fire (west of it): a plank table piled with food, crates, a bin.
+wood = unreal.load_asset("/Game/MS_NewYorkCityKitbash_Assets/Materials/M_Wood01")
+kt = hk("Props/SM_TableRestaurant_01", -HX * 0.3, -HY * 0.08, 90)
+if kt:
+    kt.set_actor_scale3d(unreal.Vector(2.6, 1.5, 1.15))
+    if wood:
+        kt.static_mesh_component.set_material(0, wood)
+for k, box in enumerate(("Market/SM_BoxPotatos_02", "Market/SM_BoxLychees_01", "Market/SM_BoxLimes_02")):
+    hk(box, -HX * 0.3 - 10 + (k % 2) * 20, -HY * 0.08 - 45 + k * 45, k * 23, z=ROOF + 86)
+hk("Market/SM_HK_MarketBox_01", -HX * 0.3 + 95, -HY * 0.08 + 20, 12)
+hk("Trash/SM_CardboardBoxOpened_01", -HX * 0.3 - 110, -HY * 0.08 + 40, 30)
+hk("Trash/SM_BinOpenedWithTrash", -HX * 0.42, -HY * 0.22, 70)
+
+# Scavenge store (north-west corner): pallets, boxes, bagged trash waiting to be hauled down.
+sxw, syw = -HX * 0.72, HY * 0.8
+hk("Props/SM_PilePallets_01", sxw, syw, 10)
+hk("Props/SM_PilePallets_01", sxw + 100, syw + 10, -5)
+hk("Props/SM_WoodenPallet", sxw + 210, syw - 30, 80)
+for k in range(5):
+    hk("Trash/SM_CardboardBox_0%d" % (1 + k % 2), sxw + 30 + (k % 3) * 45, syw - 110 - (k // 3) * 40, k * 31, z=None)
+hk("Props/StreetProps/Merged/SM_TrashBags_01_Merged", sxw - 40, syw - 160, 40)
+hk("Props/StreetProps/Merged/SM_TrashBags_02_Merged", sxw + 260, syw + 40, -20)
+
+# Washing line by the sleeping tarps (north): clothes drying on a wire between two poles.
+lx0, lx1, ly = -HX * 0.58, -HX * 0.32, HY * 0.88
+for px in (lx0, lx1):
+    p = place(cube, px, ly, ROOF + 120, 0, 1.0, label="LaundryPole", folder="Rooftop/Camp")
+    if p:
+        p.set_actor_scale3d(unreal.Vector(0.06, 0.06, 2.4))
+wire = place(cube, (lx0 + lx1) * 0.5, ly, ROOF + 236, 0, 1.0, label="LaundryWire", folder="Rooftop/Camp")
+if wire:
+    wire.set_actor_scale3d(unreal.Vector((lx1 - lx0) / 100.0, 0.01, 0.01))
+for k, piece in enumerate(("BuildingProps/SM_HK_DryingLaundry_A_Big_01", "BuildingProps/SM_HK_DryingLaundry_B_Big_01")):
+    hk(piece, lx0 + 160 + k * 260, ly, 0, z=ROOF + 236, shadow=True)
+
+# A mechanic's bike by Vic, planters of greens on the north parapet, hanging lamps under the tarps.
+hk("Props/StreetProps/SM_Bike", sx + 300, sy - 220, 12)
+hk("Props/StreetProps/Merged/SM_StreetPot_03_Merged", HX * 0.5, HY - 110, 0)
+if paint:
+    for i, (tx, ty, mi_i, beds) in enumerate(canopies):
+        hk("Market/SM_HK_HangingLamp_01", tx, ty, 0, z=ROOF + 245, shadow=False)
+        for k in range(beds):
+            hk("Market/SM_StackClothes_0%d" % (1 + (i + k) % 4), tx - 120 + k * 150, ty - 20, 20 * k, z=ROOF + 16)
+# Spare chairs and crates around the fire for the people who don't fit on the benches.
+for k in range(3):
+    a = math.radians(30 + k * 115)
+    hk("Market/SM_HK_Chair_01", cx + math.cos(a) * 470, cy + math.sin(a) * 470, math.degrees(a) + 180)
+hk("Props/SM_PilePallets_01", -HX * 0.2, -HY * 0.75, 0)
+hk("Trash/SM_CardboardBox_02", -HX * 0.2 + 70, -HY * 0.75 + 60, 25)
+
 # ---- Stations (the hub's menus) next to the people who run them --------------------------------------------------
 T = unreal.ZSStationType
 stations = [
@@ -428,6 +518,12 @@ people = [
      ["Found batteries! Radio still only plays static though.", "You ever hear a song you forgot existed?"], cx + 60, cy - 250, (cx, cy)),
     (4, "Smoke/am_Stand_Idle_Smoke_Hold_Loop", "Vic", "Mechanic",
      ["Generator's holding. Barely.", "If it's got an engine I can fix it. Probably."], sx + 330, sy - 40, None),
+    (5, "HandHip/am_HandHipL_Idle_02_LookAround", "Nadia", "Cook",
+     ["Stew tonight. Don't ask what's in it.", "Eat something. You look like one of them.", "We grew those limes up here, believe it or not."],
+     HX * 0.38 + 100, HY * 0.52 - 110, (HX * 0.38, HY * 0.52)),
+    (1, "ArmsCrossed/am_ArmsCrossedB_Idle_02_LookAround", "Eli", "Scavenger",
+     ["Hauled all that up eleven flights. You're welcome.", "Found a pharmacy on Sixth nobody's touched. Yet.",
+      "If it's not nailed down, it's ours."], -HX * 0.72 + 140, HY * 0.8 - 230, (-HX * 0.72, HY * 0.8)),
 ]
 for i, (body, idle, name, role, lines, x, y, face) in enumerate(people):
     if face is None:

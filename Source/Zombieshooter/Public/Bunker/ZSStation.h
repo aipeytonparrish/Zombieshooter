@@ -55,6 +55,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "ZS|Station") TObjectPtr<UStaticMeshComponent> Table;
 	UPROPERTY(VisibleAnywhere, Category = "ZS|Station") TObjectPtr<UStaticMeshComponent> PropA;
 	UPROPERTY(VisibleAnywhere, Category = "ZS|Station") TObjectPtr<UStaticMeshComponent> PropB;
+	UPROPERTY(VisibleAnywhere, Category = "ZS|Station") TObjectPtr<UStaticMeshComponent> PropC;
 	UPROPERTY(VisibleAnywhere, Category = "ZS|Station") TObjectPtr<UTextRenderComponent> Sign;
 	UPROPERTY(VisibleAnywhere, Category = "ZS|Station") TObjectPtr<UPointLightComponent> Lamp;
 	UPROPERTY(VisibleAnywhere, Category = "ZS|Station") TObjectPtr<USkeletalMeshComponent> Preview;

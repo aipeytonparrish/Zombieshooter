@@ -1,6 +1,7 @@
 #include "World/ZSKitInstances.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
 
 AZSKitInstances::AZSKitInstances()
 {
@@ -43,6 +44,21 @@ void AZSKitInstances::Rebuild()
 		C->SetMobility(EComponentMobility::Movable);   // built at runtime (with Static + HISM the map hung the GPU in Nanite shadow culling)
 		C->SetStaticMesh(Batch.Mesh);
 		C->SetCastShadow(Batch.bCastShadow);
+		// The kit's floor tiles have rusty-orange metal studs on their own material slot; across a whole roof or
+		// compound floor they read as orange junk scattered everywhere. Worn steel instead: dark, subtle bolt caps.
+		if (Batch.Mesh->GetName().Contains(TEXT("Floor")))
+		{
+			static const TCHAR* SteelPath = TEXT("/Game/IndustrialKit/SM_Floor_Concrete_2x2/Materials/M_Steel_Worn.M_Steel_Worn");
+			UMaterialInterface* Steel = LoadObject<UMaterialInterface>(nullptr, SteelPath, nullptr, LOAD_NoWarn | LOAD_Quiet);
+			const TArray<FStaticMaterial>& Slots = Batch.Mesh->GetStaticMaterials();
+			for (int32 i = 0; Steel && i < Slots.Num(); ++i)
+			{
+				if (Slots[i].MaterialInterface && Slots[i].MaterialInterface->GetName().Contains(TEXT("Rust")))
+				{
+					C->SetMaterial(i, Steel);
+				}
+			}
+		}
 		if (Batch.bCollide)
 		{
 			C->SetCollisionProfileName(TEXT("BlockAll"));

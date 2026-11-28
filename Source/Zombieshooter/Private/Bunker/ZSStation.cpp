@@ -13,6 +13,7 @@
 #include "Animation/AnimSequence.h"
 #include "Core/ZSCharacterCatalog.h"
 #include "Profile/ZSProfileSubsystem.h"
+#include "Misc/Paths.h"
 
 namespace
 {
@@ -43,6 +44,70 @@ namespace
 	const TCHAR* Steel = TEXT("/Game/IndustrialKit/SM_Floor_TreadPlate_2x2/Materials/M_Steel_Worn.M_Steel_Worn");
 	const TCHAR* Tread = TEXT("/Game/IndustrialKit/SM_Floor_TreadPlate_2x2/Materials/M_Tread_Plate.M_Tread_Plate");
 	const TCHAR* Corrugated = TEXT("/Game/IndustrialKit/SM_Wall_Corrugated_2x3/Materials/M_Corrugated_Metal.M_Corrugated_Metal");
+
+	/** The owner's Hong Kong city pack (market stalls, tables, clothes racks): what the camp's stations are built from. */
+	UStaticMesh* HK(const TCHAR* Rel)
+	{
+		const FString Name = FPaths::GetBaseFilename(Rel);
+		return Mesh(*FString::Printf(TEXT("/Game/CityCore_HongKong/Models/%s.%s"), Rel, *Name));
+	}
+
+	constexpr float FloorZ = -50.f;   // the station's root sits 50 cm above the roof
+
+	/** Lays a weapon part flat on a table: of the three right-angle orientations, the one whose height is smallest. */
+	FRotator LayFlat(const UStaticMesh* M, float Yaw)
+	{
+		FRotator Best(0.f, Yaw, 0.f);
+		if (!M)
+		{
+			return Best;
+		}
+		float BestZ = BIG_NUMBER;
+		for (const FRotator& R : { FRotator(0.f, 0.f, 0.f), FRotator(0.f, 0.f, 90.f), FRotator(90.f, 0.f, 0.f) })
+		{
+			const float Z = M->GetBoundingBox().TransformBy(FTransform(R)).GetSize().Z;
+			if (Z < BestZ - 0.5f)
+			{
+				BestZ = Z;
+				Best = (FRotator(0.f, Yaw, 0.f).Quaternion() * R.Quaternion()).Rotator();
+			}
+		}
+		return Best;
+	}
+
+	/**
+	 * Puts Mesh on C standing on the floor at At (XY), turned by Yaw. Uniform: scaled by the tightest of the Box axes
+	 * that are > 0. Otherwise stretched to Box exactly (tables). Returns the top's height (relative Z).
+	 */
+	float Fit(UStaticMeshComponent* C, UStaticMesh* M, const FVector& Box, bool bUniform, const FVector2D& At = FVector2D::ZeroVector, float Yaw = 0.f, float BaseZ = FloorZ)
+	{
+		C->EmptyOverrideMaterials();
+		C->SetStaticMesh(M);
+		if (!M)
+		{
+			return BaseZ;
+		}
+		const FBox Bounds = M->GetBoundingBox();
+		const FVector Size = Bounds.GetSize().ComponentMax(FVector(1.f));
+		FVector Scale(1.f);
+		if (bUniform)
+		{
+			float K = 1000.f;
+			for (int32 i = 0; i < 3; ++i) { if (Box[i] > 0.f) { K = FMath::Min(K, Box[i] / Size[i]); } }
+			Scale = FVector(K);
+		}
+		else
+		{
+			Scale = FVector(Box.X / Size.X, Box.Y / Size.Y, Box.Z / Size.Z);
+		}
+		const FRotator Rot(0.f, Yaw, 0.f);
+		const FVector Centre = Bounds.GetCenter();
+		const FVector Off = Rot.RotateVector(FVector(-Centre.X * Scale.X, -Centre.Y * Scale.Y, 0.f));
+		C->SetRelativeScale3D(Scale);
+		C->SetRelativeRotation(Rot);
+		C->SetRelativeLocation(FVector(At.X + Off.X, At.Y + Off.Y, BaseZ - Bounds.Min.Z * Scale.Z));
+		return BaseZ + Size.Z * Scale.Z;
+	}
 }
 
 AZSStation::AZSStation()
@@ -65,6 +130,7 @@ AZSStation::AZSStation()
 	Table = MakeMesh(TEXT("Table"));
 	PropA = MakeMesh(TEXT("PropA"));
 	PropB = MakeMesh(TEXT("PropB"));
+	PropC = MakeMesh(TEXT("PropC"));
 
 	Sign = CreateDefaultSubobject<UTextRenderComponent>(TEXT("Sign"));
 	Sign->SetupAttachment(Collision);
@@ -82,6 +148,7 @@ AZSStation::AZSStation()
 	Lamp->SetIntensity(60.f);
 	Lamp->SetAttenuationRadius(500.f);
 	Lamp->SetLightColor(FLinearColor(1.f, 0.82f, 0.6f));
+	Lamp->SetCastShadows(false);   // shadowed local lights + Nanite VSM hang this GPU
 
 	// Locker only: a survivor standing beside the bench, and a camera framing them on the right of the screen.
 	Preview = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Preview"));
@@ -170,49 +237,89 @@ void AZSStation::ApplyVisuals()
 {
 	Sign->SetText(StationName(Type));
 
-	// A plain dark workbench for every station, with props that say what it is.
-	Table->SetStaticMesh(Mesh(TEXT("/Engine/BasicShapes/Cube.Cube")));
-	Table->SetRelativeLocation(FVector(0.f, 0.f, -5.f));
-	Table->SetRelativeScale3D(Type == EZSStationType::MapTable ? FVector(2.4f, 1.6f, 0.9f) : FVector(1.8f, 1.f, 0.9f));
-	// Worn steel workbench (it used to render plain white: the engine shape material ignored our colour).
-	Table->SetMaterial(0, KitOrPaint(this, Type == EZSStationType::MapTable ? Tread : Steel, FLinearColor(0.08f, 0.07f, 0.06f)));
-	Collision->SetBoxExtent(Type == EZSStationType::MapTable ? FVector(120.f, 80.f, 50.f) : FVector(90.f, 50.f, 50.f));
-
-	PropA->SetStaticMesh(nullptr);
-	PropB->SetStaticMesh(nullptr);
+	// Each station is a real piece of camp furniture with props that say what it is (they used to be plain boxes).
+	for (UStaticMeshComponent* C : { PropA.Get(), PropB.Get(), PropC.Get() })
+	{
+		C->EmptyOverrideMaterials();
+		C->SetStaticMesh(nullptr);
+		C->SetRelativeRotation(FRotator::ZeroRotator);
+		C->SetRelativeScale3D(FVector(1.f));
+	}
 	Preview->SetVisibility(Type == EZSStationType::Character);
+	UStaticMesh* WoodTable = HK(TEXT("Props/SM_TableRestaurant_01"));
+	UMaterialInterface* Wood = Mat(TEXT("/Game/MS_NewYorkCityKitbash_Assets/Materials/M_Wood01.M_Wood01"));   // planks, not the pack's orange
 	switch (Type)
 	{
 	case EZSStationType::Armory:
-		PropA->SetStaticMesh(Mesh(TEXT("/Game/ZS_Imported/Weapons/RD704/SM_RD704_Receiver.SM_RD704_Receiver")));
-		PropA->SetRelativeLocationAndRotation(FVector(0.f, 0.f, 46.f), FRotator(0.f, -90.f, 90.f));
+	{
+		// Gunsmith's bench: the rifle laid out on a long table, ammo cans beside it.
+		const float Top = Fit(Table, WoodTable, FVector(180.f, 95.f, 92.f), false);
+		Table->SetMaterial(0, Wood);
+		// The rifle laid flat on the bench (receiver and stock share a pivot, so one transform keeps them together).
+		UStaticMesh* Receiver = Mesh(TEXT("/Game/ZS_Imported/Weapons/RD704/SM_RD704_Receiver.SM_RD704_Receiver"));
+		const FRotator Flat = LayFlat(Receiver, 0.f);
+		const float Lift = Receiver ? -Receiver->GetBoundingBox().TransformBy(FTransform(Flat)).Min.Z : 4.f;
+		PropA->SetStaticMesh(Receiver);
+		PropA->SetRelativeLocationAndRotation(FVector(0.f, -10.f, Top + Lift + 4.f), Flat);
 		PropB->SetStaticMesh(Mesh(TEXT("/Game/ZS_Imported/Weapons/RD704/SM_RD704_Stock.SM_RD704_Stock")));
-		PropB->SetRelativeLocationAndRotation(FVector(0.f, 0.f, 46.f), FRotator(0.f, -90.f, 90.f));
+		PropB->SetRelativeLocationAndRotation(FVector(0.f, -10.f, Top + Lift + 4.f), Flat);
+		Fit(PropC, Mesh(TEXT("/Game/ZS_Imported/Props/AmmoBoxes/SM_Ammobox_556_NATO_Closed.SM_Ammobox_556_NATO_Closed")), FVector(40.f, 0.f, 0.f), true, FVector2D(10.f, 62.f), 15.f, Top);
+		Collision->SetBoxExtent(FVector(90.f, 50.f, 50.f));
 		break;
+	}
 	case EZSStationType::Market:
-		PropA->SetStaticMesh(Mesh(TEXT("/Game/ZS_Imported/Props/AmmoBoxes/SM_Ammobox_50.SM_Ammobox_50")));
-		PropA->SetRelativeLocation(FVector(-30.f, 0.f, 45.f));
-		PropB->SetStaticMesh(Mesh(TEXT("/Game/ZS_Imported/Props/AmmoBoxes/SM_Ammobox_40mm_Grenade_Closed.SM_Ammobox_40mm_Grenade_Closed")));
-		PropB->SetRelativeLocation(FVector(40.f, 10.f, 45.f));
+	{
+		// The trader's counter under her tarp: crates of produce and a can of rounds on the planks, more stock below.
+		const float Top = Fit(Table, WoodTable, FVector(180.f, 90.f, 90.f), false);
+		Table->SetMaterial(0, Wood);
+		Fit(PropA, HK(TEXT("Market/SM_BoxLimes_01")), FVector(50.f, 0.f, 0.f), true, FVector2D(-45.f, -5.f), 8.f, Top);
+		Fit(PropB, HK(TEXT("Market/SM_BoxPotatos_01")), FVector(50.f, 0.f, 0.f), true, FVector2D(15.f, 10.f), -10.f, Top);
+		Fit(PropC, Mesh(TEXT("/Game/ZS_Imported/Props/AmmoBoxes/SM_Ammobox_9mm_Closed.SM_Ammobox_9mm_Closed")), FVector(38.f, 0.f, 0.f), true, FVector2D(65.f, -10.f), 80.f, Top);
+		Collision->SetBoxExtent(FVector(95.f, 65.f, 50.f));
 		break;
+	}
 	case EZSStationType::Character:
-		// A tall mirror / locker.
-		PropA->SetStaticMesh(Mesh(TEXT("/Engine/BasicShapes/Cube.Cube")));
-		PropA->SetRelativeLocationAndRotation(FVector(30.f, 0.f, 100.f), FRotator::ZeroRotator);
-		PropA->SetRelativeScale3D(FVector(0.1f, 0.9f, 2.f));
-		PropA->SetMaterial(0, KitOrPaint(this, Corrugated, FLinearColor(0.1f, 0.12f, 0.1f)));
+	{
+		// The wardrobe: a clothes rack and a folded pile on a crate.
+		Fit(Table, HK(TEXT("Market/SM_HK_MarketClothesHanger_01")), FVector(170.f, 100.f, 150.f), true);
+		const float CrateTop = Fit(PropA, HK(TEXT("Market/SM_HK_MarketBox_01")), FVector(55.f, 0.f, 0.f), true, FVector2D(10.f, 95.f), 5.f);
+		Fit(PropB, HK(TEXT("Market/SM_StackClothes_01")), FVector(36.f, 0.f, 0.f), true, FVector2D(10.f, 95.f), 30.f, CrateTop);
+		Collision->SetBoxExtent(FVector(85.f, 50.f, 50.f));
 		break;
+	}
 	case EZSStationType::Missions:
-		PropA->SetStaticMesh(Mesh(TEXT("/Engine/BasicShapes/Plane.Plane")));
-		PropA->SetRelativeLocationAndRotation(FVector(40.f, 0.f, 110.f), FRotator(90.f, 0.f, 0.f));
-		PropA->SetRelativeScale3D(FVector(1.f, 1.6f, 1.f));
-		PropA->SetMaterial(0, KitOrPaint(this, TEXT("/Game/MS_NewYorkCityKitbash_Assets/Materials/M_Wood01.M_Wood01"), FLinearColor(0.2f, 0.13f, 0.07f)));   // board (was white: empty kit path)
+	{
+		// Ops desk: a table with papers, the job list chalked on a board behind it.
+		const float Top = Fit(Table, WoodTable, FVector(150.f, 75.f, 90.f), false);
+		Table->SetMaterial(0, Wood);
+		Fit(PropA, HK(TEXT("Props/StreetProps/SM_FrameChalkboard")), FVector(0.f, 0.f, 175.f), true, FVector2D(70.f, 0.f), 90.f);
+		Fit(PropB, HK(TEXT("Trash/SM_CardboardBox_01")), FVector(38.f, 0.f, 0.f), true, FVector2D(-15.f, 25.f), 20.f, Top);
+		Fit(PropC, HK(TEXT("Props/SM_CoffeeCupWithPlate_02")), FVector(14.f, 0.f, 0.f), true, FVector2D(-20.f, -30.f), 0.f, Top);
+		Collision->SetBoxExtent(FVector(80.f, 45.f, 50.f));
 		break;
+	}
 	case EZSStationType::MapTable:
+	{
+		// Planning table with the city map glowing on it.
+		const float Top = Fit(Table, WoodTable, FVector(240.f, 160.f, 90.f), false);
+		Table->SetMaterial(0, Wood);
 		PropA->SetStaticMesh(Mesh(TEXT("/Engine/BasicShapes/Plane.Plane")));
-		PropA->SetRelativeLocation(FVector(0.f, 0.f, 41.f));
+		PropA->SetRelativeLocation(FVector(0.f, 0.f, Top + 0.6f));
 		PropA->SetRelativeScale3D(FVector(2.f, 1.3f, 1.f));
-		PropA->SetMaterial(0, KitOrPaint(this, TEXT(""), FLinearColor(0.05f, 0.2f, 0.08f), 0.6f));   // glowing tactical map screen
+		PropA->SetMaterial(0, KitOrPaint(this, TEXT(""), FLinearColor(0.05f, 0.2f, 0.08f), 0.6f));   // glowing tactical map
+		Fit(PropB, HK(TEXT("Props/SM_CoffeeCupWithPlate_02")), FVector(14.f, 0.f, 0.f), true, FVector2D(-105.f, 65.f), 0.f, Top);
+		Fit(PropC, Mesh(TEXT("/Game/ZS_Imported/Props/AmmoBoxes/SM_Ammobox_50_Closed.SM_Ammobox_50_Closed")), FVector(38.f, 0.f, 0.f), true, FVector2D(100.f, -62.f), 30.f, Top);
+		Collision->SetBoxExtent(FVector(120.f, 80.f, 50.f));
 		break;
+	}
+	}
+	if (!Table->GetStaticMesh())
+	{
+		// Pack missing: the old plain workbench.
+		Table->SetStaticMesh(Mesh(TEXT("/Engine/BasicShapes/Cube.Cube")));
+		Table->SetRelativeLocation(FVector(0.f, 0.f, -5.f));
+		Table->SetRelativeRotation(FRotator::ZeroRotator);
+		Table->SetRelativeScale3D(Type == EZSStationType::MapTable ? FVector(2.4f, 1.6f, 0.9f) : FVector(1.8f, 1.f, 0.9f));
+		Table->SetMaterial(0, KitOrPaint(this, Steel, FLinearColor(0.08f, 0.07f, 0.06f)));
 	}
 }

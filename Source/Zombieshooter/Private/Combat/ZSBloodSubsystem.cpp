@@ -224,6 +224,37 @@ void UZSBloodSubsystem::SpawnDrip(const FVector& Location, const FVector& Veloci
 	M->Color = MistColor;
 }
 
+void UZSBloodSubsystem::SpawnSmoke(const FVector& Location, const FVector& Velocity, float StartSize, float EndSize, float Life, const FLinearColor& Color, float Opacity)
+{
+	EnsureResources();
+	FParticle* P = AddParticle(EKind::Puff);
+	P->Location = Location;
+	P->Velocity = Velocity;
+	P->Size = StartSize;
+	P->EndSize = EndSize;
+	P->MaxLife = Life;
+	P->Drag = 0.08f;
+	P->Gravity = -0.01f;
+	P->Opacity = Opacity;
+	P->Color = Color;
+}
+
+void UZSBloodSubsystem::SpawnEmber(const FVector& Location, const FVector& Velocity)
+{
+	EnsureResources();
+	FParticle* P = AddParticle(EKind::Spark);
+	P->Location = Location;
+	P->Velocity = Velocity;
+	P->Size = FMath::FRandRange(1.2f, 2.6f);
+	P->EndSize = P->Size * 0.3f;
+	P->MaxLife = FMath::FRandRange(2.f, 4.f);
+	P->Gravity = -0.04f;
+	P->Drag = 0.5f;
+	P->Stretch = 0.004f;
+	P->Opacity = 0.9f;
+	P->Color = FLinearColor(1.f, 0.42f, 0.1f);
+}
+
 void UZSBloodSubsystem::SpawnDust(const FVector& Location, const FVector& Velocity, float Scale)
 {
 	EnsureResources();

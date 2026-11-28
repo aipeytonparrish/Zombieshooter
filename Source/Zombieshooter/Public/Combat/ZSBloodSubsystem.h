@@ -45,6 +45,11 @@ public:
 	/** A few drops falling from a point (stumps, gibs in flight). */
 	void SpawnDrip(const FVector& Location, const FVector& Velocity, int32 Count = 2);
 
+	/** One smoke billow (AZSSmokeColumn): grows from StartSize to EndSize over Life seconds. */
+	void SpawnSmoke(const FVector& Location, const FVector& Velocity, float StartSize, float EndSize, float Life, const FLinearColor& Color, float Opacity);
+	/** A glowing ember drifting up. */
+	void SpawnEmber(const FVector& Location, const FVector& Velocity);
+
 	/** A puff of dust (slides, landings). */
 	void SpawnDust(const FVector& Location, const FVector& Velocity, float Scale = 1.f);
 
@@ -57,7 +62,7 @@ public:
 	virtual TStatId GetStatId() const override;
 	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
 
-	int32 MaxParticles = 900;
+	int32 MaxParticles = 1400;
 	int32 MaxBloodDecals = 96;
 	int32 MaxHoleDecals = 160;
 

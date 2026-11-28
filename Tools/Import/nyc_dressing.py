@@ -79,12 +79,24 @@ class Dresser:
         a.set_actor_scale3d(unreal.Vector(scale, scale, scale))
         a.set_folder_path(folder)
 
+    def smoke(self, x, y, z, size, rise, life, rate, opacity, embers, folder="Dressing/Fires"):
+        s = self.eas.spawn_actor_from_class(unreal.ZSSmokeColumn, unreal.Vector(x, y, z), unreal.Rotator(0, 0, 0))
+        s.set_folder_path(folder)
+        s.set_editor_property("size", unreal.Vector2D(*size))
+        s.set_editor_property("rise_speed", rise)
+        s.set_editor_property("life", life)
+        s.set_editor_property("rate", rate)
+        s.set_editor_property("opacity", opacity)
+        s.set_editor_property("ember_rate", embers)
+        return s
+
     def barrel_fire(self, x, y, folder="Dressing/Fires"):
         can = self.prop("SM_TrashCan02", x, y, self.rng.uniform(0, 360), maxsize=95, folder=folder)
         if can:
             top = can.get_actor_location().z + 85
             self.fire(x, y, top, FIRE, 0.32, folder)
             self.light(x, y, top + 60, (255, 140, 60), 30, 900)
+            self.smoke(x, y, top + 40, (30, 420), 140, 8.0, 2.0, 0.35, 6.0)
 
     def decal(self, x, y, z, path, size, folder="Dressing/Blood"):
         mat = unreal.load_asset(path)
@@ -138,6 +150,10 @@ def dress(eas, compound_rooms):
         z = d.ground_z(x, y, STREET_Z)
         d.fire(x, y, z, FIRE_FLOOR, 0.7)
         d.light(x, y, z + 120, (255, 120, 50), 40, 1100)
+        d.smoke(x, y, z + 80, (60, 900), 200, 12.0, 2.0, 0.45, 8.0)
+    # The city burning beyond the street: big smoke columns over the rooftops.
+    for x, y in ((7000, -3000), (9000, 4000), (-6000, 2000), (5000, 12000), (-4000, -7000)):
+        d.smoke(x, y, 3500, (800, 5000), 320, 24.0, 1.0, 0.5, 0.0)
 
     # Old blood: splats and pools on the street and through the compound.
     for i in range(40):

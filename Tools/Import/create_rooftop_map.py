@@ -287,6 +287,68 @@ for name, dist, ang, dz in ring:
     a = math.radians(ang)
     place(KB % name, math.cos(a) * dist, math.sin(a) * dist, -b.min.z, ang + 90, 1.0, False, label="City_" + name, folder="City")
 
+# A denser city beyond: two more rings of towers (every kitbash building type, repeated), several burning with smoke
+# columns climbing into the evening sky. Shadowless (huge Nanite shadow casters hang this GPU).
+burning = []
+types = ["SM_Building%02d" % i for i in range(1, 16) if i not in (11, 12)]
+k = 0
+for ring_r, n in ((22000, 12), (36000, 18), (52000, 22)):
+    for j in range(n):
+        name = types[k % len(types)]
+        k += 1
+        m = mesh(KB % name)
+        if not m:
+            continue
+        b = m.get_bounding_box()
+        a = math.radians(j * 360.0 / n + (k * 37) % 23)
+        r = ring_r + ((k * 7919) % 6000) - 3000
+        x, y = math.cos(a) * r, math.sin(a) * r
+        place(KB % name, x, y, -b.min.z, (k * 47) % 360, 1.0, False, label="City_" + name, folder="City")
+        if k % 5 == 0:
+            burning.append((x, y, b.max.z - b.min.z))
+
+fire_sys = unreal.load_asset("/Game/RealisticFireFX/FX/Floor/NS_FireFloor_03")
+for i, (x, y, h) in enumerate(burning):
+    if fire_sys:
+        fa = eas.spawn_actor_from_class(unreal.NiagaraActor, unreal.Vector(x, y, h), unreal.Rotator(0, 0, 0))
+        fa.niagara_component.set_asset(fire_sys)
+        fa.set_actor_scale3d(unreal.Vector(9, 9, 9))
+        fa.set_actor_label("SkylineFire_%d" % i)
+        fa.set_folder_path("City/Fires")
+    light(x, y, h + 600, (255, 120, 40), 2500, 9000, label="SkylineFireLight_%d" % i)
+    sm = eas.spawn_actor_from_class(unreal.ZSSmokeColumn, unreal.Vector(x, y, h + 300), unreal.Rotator(0, 0, 0))
+    sm.set_actor_label("SkylineSmoke_%d" % i)
+    sm.set_folder_path("City/Fires")
+    sm.set_editor_property("size", unreal.Vector2D(900, 6000))
+    sm.set_editor_property("rise_speed", 380.0)
+    sm.set_editor_property("life", 26.0)
+    sm.set_editor_property("rate", 1.2)
+    sm.set_editor_property("ember_rate", 0.0)
+    sm.set_editor_property("wind", unreal.Vector(260, 120, 0))
+# The camp fire's own thin smoke.
+cs = eas.spawn_actor_from_class(unreal.ZSSmokeColumn, unreal.Vector(cx, cy, ROOF + 60), unreal.Rotator(0, 0, 0))
+cs.set_actor_label("CampFireSmoke")
+cs.set_folder_path("Rooftop/Fire")
+cs.set_editor_property("size", unreal.Vector2D(40, 380))
+cs.set_editor_property("rise_speed", 120.0)
+cs.set_editor_property("life", 7.0)
+cs.set_editor_property("rate", 2.5)
+cs.set_editor_property("opacity", 0.3)
+cs.set_editor_property("color", unreal.LinearColor(0.12, 0.11, 0.1, 1))
+cs.set_editor_property("ember_rate", 5.0)
+
+# Ash drifting down over the camp (our rain actor, set up as slow grey flakes, no lightning).
+ash = eas.spawn_actor_from_class(unreal.ZSRain, unreal.Vector(0, 0, ROOF + 300), unreal.Rotator(0, 0, 0))
+ash.set_actor_label("Ash")
+ash.set_editor_property("drop_count", 1800)
+ash.set_editor_property("box_extent", unreal.Vector(1600, 1600, 900))
+ash.set_editor_property("fall_speed", 85.0)
+ash.set_editor_property("streak_size", unreal.Vector2D(2.6, 2.6))
+ash.set_editor_property("opacity", 0.75)
+ash.set_editor_property("color", unreal.LinearColor(0.33, 0.31, 0.29, 1))
+ash.set_editor_property("wind", 0.9)
+ash.set_editor_property("lightning", False)
+
 # ---- Sky: golden hour -----------------------------------------------------------------------------------------------
 for a in eas.get_all_level_actors():
     label = a.get_actor_label()

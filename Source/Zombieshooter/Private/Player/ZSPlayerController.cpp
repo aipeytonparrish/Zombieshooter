@@ -409,7 +409,10 @@ void AZSPlayerController::StartAutoShotIfRequested()
 
 	if (bBursts)
 	{
-		// Short controlled bursts: press 0.18 s, release 0.3 s, repeat.
+		// Short controlled bursts: press 0.18 s, release 0.3 s, repeat. -ZSAutoBurstsAt=6 holds fire until 6 s (lets
+		// zombies walk up for close-up shots).
+		float BurstsAt = 1.f;
+		FParse::Value(Cmd, TEXT("ZSAutoBurstsAt="), BurstsAt);
 		FTimerHandle BurstTimer;
 		GetWorldTimerManager().SetTimer(BurstTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
 		{
@@ -420,7 +423,7 @@ void AZSPlayerController::StartAutoShotIfRequested()
 				FTimerHandle Release;
 				GetWorldTimerManager().SetTimer(Release, FTimerDelegate::CreateWeakLambda(this, [Weapons]() { Weapons->SetTriggerHeld(false); }), 0.18f, false);
 			}
-		}), 0.48f, true, 1.f);
+		}), 0.48f, true, FMath::Max(0.1f, BurstsAt));
 	}
 
 	// -ZSAutoSlide[=hold]: run forward with sprint on, tap crouch at 1.5 s (released 0.1 s later), log the movement every
@@ -538,7 +541,9 @@ void AZSPlayerController::ZSZombies(int32 Count, int32 Type, float SpreadDegrees
 	for (int32 i = 0; i < FMath::Clamp(Count, 1, 60); ++i)
 	{
 		const float Yaw = BaseYaw + FMath::FRandRange(-SpreadDegrees, SpreadDegrees);
-		const float Dist = FMath::FRandRange(1200.f, 2500.f);
+		float Dist = FMath::FRandRange(1200.f, 2500.f);
+		float Near = 0.f;   // dev: -ZSAutoZombieDist=400 spawns them that close (close-up gore shots)
+		if (FParse::Value(FCommandLine::Get(), TEXT("ZSAutoZombieDist="), Near) && Near > 0.f) { Dist = Near * FMath::FRandRange(0.9f, 1.15f); }
 		const FVector Flat = Origin + FRotator(0.f, Yaw, 0.f).Vector() * Dist;
 
 		FHitResult Hit;

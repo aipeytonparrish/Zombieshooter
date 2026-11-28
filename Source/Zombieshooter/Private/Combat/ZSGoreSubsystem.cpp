@@ -1,4 +1,5 @@
 #include "Combat/ZSGoreSubsystem.h"
+#include "Weapons/ZSWeaponTypes.h"
 #include "Combat/ZSBloodSubsystem.h"
 #include "Core/ZSGameUserSettings.h"
 #include "UI/ZSHUD.h"
@@ -82,6 +83,8 @@ void UZSGoreSubsystem::SpawnGibs(const FVector& Location, const FVector& Directi
 		C->SetWorldLocationAndRotation(Location + FMath::VRand() * 10.f, FMath::VRand().Rotation());
 		C->SetCollisionProfileName(TEXT("PhysicsActor"));
 		C->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+		C->SetCollisionResponseToChannel(ZS_TRACE_WEAPON, ECR_Ignore);   // gibs must not stop bullets
+		C->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
 		C->SetCastShadow(false);
 		C->SetMobility(EComponentMobility::Movable);
 		if (Flesh)

@@ -255,6 +255,44 @@ void UZSBloodSubsystem::SpawnEmber(const FVector& Location, const FVector& Veloc
 	P->Color = FLinearColor(1.f, 0.42f, 0.1f);
 }
 
+void UZSBloodSubsystem::SpawnMuzzleFlash(const FVector& Location, const FVector& Forward, float Scale)
+{
+	EnsureResources();
+	const FVector F = Forward.GetSafeNormal();
+	// Forward tongue of flame.
+	for (int32 i = 0; i < 4; ++i)
+	{
+		FParticle* P = AddParticle(EKind::Spark);
+		P->Location = Location + F * 2.f;
+		P->Velocity = FMath::VRandCone(F, FMath::DegreesToRadians(9.f)) * FMath::FRandRange(500.f, 900.f) * Scale;
+		P->Size = FMath::FRandRange(1.6f, 2.6f) * Scale;
+		P->EndSize = P->Size * 0.5f;
+		P->MaxLife = FMath::FRandRange(0.03f, 0.05f);
+		P->Drag = 18.f;
+		P->Stretch = 0.012f;
+		P->Opacity = 1.f;
+		P->Color = FLinearColor(1.f, 0.78f, 0.45f) * 2.2f;
+	}
+	// Star points out the sides of the muzzle.
+	const FVector Side = FVector::CrossProduct(F, FVector::UpVector).GetSafeNormal();
+	const FVector Up = FVector::CrossProduct(Side, F);
+	const float Spin = FMath::FRandRange(0.f, 2.f * PI);
+	for (int32 i = 0; i < 4; ++i)
+	{
+		const float A = Spin + i * PI * 0.5f;
+		FParticle* P = AddParticle(EKind::Spark);
+		P->Location = Location;
+		P->Velocity = (Side * FMath::Cos(A) + Up * FMath::Sin(A) + F * 0.4f).GetSafeNormal() * FMath::FRandRange(220.f, 380.f) * Scale;
+		P->Size = FMath::FRandRange(0.9f, 1.4f) * Scale;
+		P->EndSize = P->Size * 0.4f;
+		P->MaxLife = 0.035f;
+		P->Drag = 25.f;
+		P->Stretch = 0.02f;
+		P->Opacity = 1.f;
+		P->Color = FLinearColor(1.f, 0.85f, 0.6f) * 1.8f;
+	}
+}
+
 void UZSBloodSubsystem::SpawnDust(const FVector& Location, const FVector& Velocity, float Scale)
 {
 	EnsureResources();

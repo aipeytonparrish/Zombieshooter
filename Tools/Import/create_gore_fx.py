@@ -13,6 +13,7 @@ and in /Game/ZS/Materials:
                     0 = opacity, 1-3 = colour. Param Tex.  MI_ZS_FXPuff (mist / dust), MI_ZS_FXDrop (droplets)
   M_ZS_FXSpark      unlit additive streak (custom data 0 = opacity, 1-3 = colour) for metal sparks / muzzle embers
   M_ZS_Flesh        wet, mottled flesh for gibs
+  M_ZS_BloodOverlay per-zombie wound blood + special rim glow (mesh overlay). Pass 'overlay' to rebuild only it.
   M_ZS_Paint        plain lit paint for placeholders. Params: Color, Roughness, Metallic, Emissive (scalar, x Color).
                     (The engine's BasicShapeMaterial ignores a "Color" parameter in game, which left placeholders white.)
 """
@@ -279,42 +280,121 @@ def build_camo():
     return mat
 
 
+WOUND_SLOTS = 8
+
+WOUND_HLSL = r"""
+float3 Wp[8] = {W0, W1, W2, W3, W4, W5, W6, W7};
+float3 Wd[8] = {D0, D1, D2, D3, D4, D5, D6, D7};
+float  Wr[8] = {R0, R1, R2, R3, R4, R5, R6, R7};
+float a = 0;
+for (int i = 0; i < 8; i++)
+{
+    if (Wr[i] <= 0.01) continue;
+    // Each wound is the bullet's path through the body: a short cylinder (axis Wd, |Wd| = half length) centred in the
+    // body, so the stain shows on the clothes where it went in and where it came out. Wd = 0 -> a plain blob.
+    float3 d = P - Wp[i];
+    float3 ax = Wd[i];
+    float t = dot(d, ax) / max(dot(ax, ax), 1.0);
+    float3 perp = d - ax * t;
+    // Blood runs down from the wound: below it the vertical distance counts for less, above it for more.
+    perp.z *= (perp.z < 0) ? 0.32 : 1.4;
+    float r = Wr[i] * (0.7 + 0.6 * N);
+    a = max(a, saturate((r - length(perp)) / (0.45 * r)) * saturate((1.0 - abs(t)) * 3.0));
+}
+return a;
+"""
+
+
 def build_blood_overlay():
-    """Zombies soak with blood as they're shot (mesh overlay). Blotches pinned to the body (pre-skinned position), so
-    they move with it; Amount 0..1 grows them, Seed varies the pattern per zombie. Dark, wet, glossy."""
+    """Per-zombie wound blood (mesh overlay). Up to 8 wounds, each pinned to the body in pre-skinned space where a bullet
+    landed: W0..W7 = centre of the bullet's path through the body (mesh space, cm), D0..D7 = path direction x half
+    length, R0..R7 = radius (0 = unused). Ragged edges (noise, Seed), runs
+    downward. Also carries the special-zombie rim glow (GlowColor, GlowOpacity, Fresnel) so one overlay does both."""
     mat = fresh_material("M_ZS_BloodOverlay")
     mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
     # Volumetric lighting: no sky-reflection sheen (surface lighting made the blotches read pink-white in the sun).
     mat.set_editor_property("translucency_lighting_mode", unreal.TranslucencyLightingMode.TLM_VOLUMETRIC_NON_DIRECTIONAL)
     mat.set_editor_property("used_with_skeletal_mesh", True)
-    pos = expr(mat, unreal.MaterialExpressionPreSkinnedPosition, -1300, 0)
-    seed = scalar(mat, "Seed", 0.0, -1300, 150)
-    sp = expr(mat, unreal.MaterialExpressionAdd, -1100, 50)
+    raw_pos = expr(mat, unreal.MaterialExpressionPreSkinnedPosition, -1800, 0)
+    # Pre-skinned position only exists in the vertex shader: hand it to the pixel shader through an interpolator.
+    pos = expr(mat, unreal.MaterialExpressionVertexInterpolator, -1600, 0)
+    link(raw_pos, pos, "VS")
+    seed = scalar(mat, "Seed", 0.0, -1500, 150)
+    sp = expr(mat, unreal.MaterialExpressionAdd, -1300, 50)
     link(pos, sp, "A")
     link(seed, sp, "B")
-    n = expr(mat, unreal.MaterialExpressionNoise, -900, 0, scale=0.05, levels=4, output_min=0.0, output_max=1.0)
+    n = expr(mat, unreal.MaterialExpressionNoise, -1100, 50, scale=0.18, levels=4, output_min=0.0, output_max=1.0)
     link(sp, n, "Position")
-    amount = scalar(mat, "Amount", 0.0, -900, 250)
-    inv = expr(mat, unreal.MaterialExpressionOneMinus, -700, 250)
-    link(amount, inv)
-    sub_ = expr(mat, unreal.MaterialExpressionSubtract, -550, 100)
-    link(n, sub_, "A")
-    link(inv, sub_, "B")
-    mul = expr(mat, unreal.MaterialExpressionMultiply, -400, 100, const_b=10.0)
-    link(sub_, mul, "A")
-    sat = expr(mat, unreal.MaterialExpressionSaturate, -250, 100)
-    link(mul, sat)
-    op = expr(mat, unreal.MaterialExpressionMultiply, -100, 100, const_b=0.97)
-    link(sat, op, "A")
+
+    c = expr(mat, unreal.MaterialExpressionCustom, -700, 0)
+    c.set_editor_property("code", WOUND_HLSL)
+    c.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT1)
+    c.set_editor_property("description", "Wounds")
+    names = (["P", "N"] + ["W%d" % i for i in range(WOUND_SLOTS)] + ["D%d" % i for i in range(WOUND_SLOTS)]
+             + ["R%d" % i for i in range(WOUND_SLOTS)])
+    inputs = []
+    for nm in names:
+        ci = unreal.CustomInput()
+        ci.set_editor_property("input_name", nm)
+        inputs.append(ci)
+    c.set_editor_property("inputs", inputs)
+    link(pos, c, "P")
+    link(n, c, "N")
+    for i in range(WOUND_SLOTS):
+        w = vector(mat, "W%d" % i, unreal.LinearColor(0, 0, 0, 0), -1100, 250 + i * 160)
+        link(w, c, "W%d" % i)
+        dv = vector(mat, "D%d" % i, unreal.LinearColor(0, 0, 0, 0), -1400, 250 + i * 160)
+        link(dv, c, "D%d" % i)
+        r = scalar(mat, "R%d" % i, 0.0, -1100, 1600 + i * 100)
+        link(r, c, "R%d" % i)
+
+    # Rim glow for specials, same look as M_ZS_Glow: opacity = GlowOpacity * (0.25 + fresnel),
+    # emissive = GlowColor * 4 * (0.35 + fresnel), faded out under blood.
+    fres_exp = scalar(mat, "Fresnel", 2.5, -900, -500)
+    fres = expr(mat, unreal.MaterialExpressionFresnel, -700, -500)
+    link(fres_exp, fres, "ExponentIn")
+    f_op = expr(mat, unreal.MaterialExpressionAdd, -550, -450, const_b=0.25)
+    link(fres, f_op, "A")
+    glow_op = scalar(mat, "GlowOpacity", 0.0, -700, -350)
+    glow_a = expr(mat, unreal.MaterialExpressionMultiply, -400, -450)
+    link(f_op, glow_a, "A")
+    link(glow_op, glow_a, "B")
+
+    wound_a = expr(mat, unreal.MaterialExpressionMultiply, -450, 0, const_b=0.95)
+    link(c, wound_a, "A")
+    op = expr(mat, unreal.MaterialExpressionMax, -250, -100)
+    link(wound_a, op, "A")
+    link(glow_a, op, "B")
     mel.connect_material_property(op, "", unreal.MaterialProperty.MP_OPACITY)
-    # Thicker (deeper into the blotch) = darker, edges a little brighter red.
-    dark = expr(mat, unreal.MaterialExpressionConstant3Vector, -400, -250, constant=unreal.LinearColor(0.018, 0.0, 0.0, 1))
-    red = expr(mat, unreal.MaterialExpressionConstant3Vector, -400, -400, constant=unreal.LinearColor(0.07, 0.003, 0.002, 1))
-    col = expr(mat, unreal.MaterialExpressionLinearInterpolate, -200, -300)
+
+    # Colour: wet dark-red core, brighter red where it soaks out at the edges.
+    dark = expr(mat, unreal.MaterialExpressionConstant3Vector, -500, -800, constant=unreal.LinearColor(0.045, 0.002, 0.001, 1))
+    red = expr(mat, unreal.MaterialExpressionConstant3Vector, -500, -950, constant=unreal.LinearColor(0.13, 0.008, 0.004, 1))
+    col = expr(mat, unreal.MaterialExpressionLinearInterpolate, -300, -850)
     link(red, col, "A")
     link(dark, col, "B")
-    link(sat, col, "Alpha")
+    link(c, col, "Alpha")
     mel.connect_material_property(col, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    rough = expr(mat, unreal.MaterialExpressionConstant, -300, -700, r=0.25)
+    mel.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    glow_col = vector(mat, "GlowColor", unreal.LinearColor(0, 0, 0, 1), -700, -650)
+    f_em = expr(mat, unreal.MaterialExpressionAdd, -550, -600, const_b=0.35)
+    link(fres, f_em, "A")
+    keep = expr(mat, unreal.MaterialExpressionOneMinus, -300, -600)
+    link(c, keep)
+    em = expr(mat, unreal.MaterialExpressionMultiply, -150, -650)
+    link(glow_col, em, "A")
+    link(f_em, em, "B")
+    em2 = expr(mat, unreal.MaterialExpressionMultiply, -50, -650)
+    link(em, em2, "A")
+    link(keep, em2, "B")
+    em3 = expr(mat, unreal.MaterialExpressionMultiply, 50, -650, const_b=4.0)
+    link(em2, em3, "A")
+    # Lit translucency doesn't fade emissive by opacity the way the unlit glow did, so pre-multiply it.
+    em4 = expr(mat, unreal.MaterialExpressionMultiply, 150, -650)
+    link(em3, em4, "A")
+    link(glow_a, em4, "B")
+    mel.connect_material_property(em4, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     mel.recompile_material(mat)
     zs.eal.save_loaded_asset(mat)
     return mat
@@ -337,6 +417,11 @@ def build_paint():
     zs.eal.save_loaded_asset(mat)
     return mat
 
+
+if "overlay" in sys.argv[1:]:
+    build_blood_overlay()   # just the wound overlay (fast iteration)
+    zs.log("gore fx: blood overlay rebuilt")
+    raise SystemExit(0)
 
 tex = import_textures()
 decal = build_decal_master(tex["T_ZS_BloodSplat"])

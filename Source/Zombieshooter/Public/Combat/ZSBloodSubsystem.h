@@ -49,6 +49,8 @@ public:
 	void SpawnSmoke(const FVector& Location, const FVector& Velocity, float StartSize, float EndSize, float Life, const FLinearColor& Color, float Opacity);
 	/** A glowing ember drifting up. */
 	void SpawnEmber(const FVector& Location, const FVector& Velocity);
+	/** Muzzle flash: a hot white-yellow star of short additive streaks at the muzzle, mostly forward. */
+	void SpawnMuzzleFlash(const FVector& Location, const FVector& Forward, float Scale = 1.f);
 
 	/** A puff of dust (slides, landings). */
 	void SpawnDust(const FVector& Location, const FVector& Velocity, float Scale = 1.f);

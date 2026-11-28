@@ -160,6 +160,13 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual float TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
+	/**
+	 * Bullet test against capsules built from the skeleton (torso, shoulders, limbs, head), so a shot that visibly lands on
+	 * the body counts even where the physics asset is thin or has no body at all (no clavicles). Fills OutHit like a hit on
+	 * the mesh (BoneName = the bone of the part hit). Severed parts don't count.
+	 */
+	bool TraceBody(const FVector& Start, const FVector& End, FHitResult& OutHit);
+
 	/** Number of living zombies (for debug / the round system). */
 	static int32 GetLiveCount() { return LiveCount; }
 
@@ -289,10 +296,28 @@ private:
 	void UpdatePhysicalHit(float DeltaSeconds);
 	void StopPhysicalHit();
 	float HitReactAlpha = 0.f;
-	/** Wet blood soaking through the clothes as the zombie takes damage (M_ZS_BloodOverlay on the mesh). */
-	void AddBloodiness(float Amount);
+	/**
+	 * Wound blood: a stain pinned to the body where a bullet landed (M_ZS_BloodOverlay, up to 8 wounds in pre-skinned mesh
+	 * space, so it moves with the body and every zombie bleeds where *it* was shot). Nearby hits grow the same wound.
+	 */
+	void AddWound(const FVector& WorldPoint, FName Bone, float Radius, const FVector& ShotDir = FVector::ZeroVector);
+	UMaterialInstanceDynamic* EnsureBloodOverlay();
 	UPROPERTY(Transient) TObjectPtr<class UMaterialInstanceDynamic> BloodMID;
-	float Bloodiness = 0.f;
+	TArray<FVector4> Wounds;   // xyz = pre-skinned position, w = radius
+	int32 NextWound = 0;
+
+	struct FHitCapsule
+	{
+		int32 Bone = INDEX_NONE;   // the part (and its label)
+		int32 To = INDEX_NONE;     // segment Bone -> To, or (INDEX_NONE) along From -> Bone, Off0..Off1 past Bone
+		int32 From = INDEX_NONE;
+		float Off0 = 0.f;
+		float Off1 = 0.f;
+		float Radius = 8.f;        // mesh-space cm
+	};
+	TArray<FHitCapsule> HitCapsules;
+	bool bHitCapsulesBuilt = false;
+	void BuildHitCapsules();
 	FRotator Jolt = FRotator::ZeroRotator;
 	FRotator JoltVel = FRotator::ZeroRotator;
 

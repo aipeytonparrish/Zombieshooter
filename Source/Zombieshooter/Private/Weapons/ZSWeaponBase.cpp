@@ -12,6 +12,12 @@
 #include "Kismet/GameplayStatics.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
+#include "NiagaraComponent.h"
+#include "Combat/ZSBloodSubsystem.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/Controller.h"
+
+static TAutoConsoleVariable<int32> CVarZSMuzzleFX(TEXT("zs.MuzzleFX"), 0, TEXT("Pack muzzle flash Niagara: 0 off (our own spark flash), 1 pack flame, 2 pack flame + smoke. The pack's flame reads as a pink smudge 70 cm in front of the camera in daylight."));
 #include "Sound/SoundBase.h"
 #include "Weapons/ZSWeaponCatalog.h"
 #include "Zombieshooter.h"
@@ -298,6 +304,19 @@ void AZSWeaponBase::PlayMuzzleFlash()
 {
 	MuzzleFlashTime = 0.05f;
 	MuzzleLight->SetIntensity(120.f);
+	if (CVarZSMuzzleFX.GetValueOnGameThread() == 0)
+	{
+		if (UZSBloodSubsystem* FX = GetWorld()->GetSubsystem<UZSBloodSubsystem>())
+		{
+			const FVector Muzzle = GetMuzzleWorldLocation();
+			FVector Fwd = GetActorForwardVector();
+			if (const APawn* P = Cast<APawn>(GetOwner()))
+			{
+				if (P->GetController()) { Fwd = P->GetController()->GetControlRotation().Vector(); }
+			}
+			FX->SpawnMuzzleFlash(Muzzle, Fwd, Stats.WeaponClass == EZSWeaponClass::Pistol ? 0.7f : 1.f);
+		}
+	}
 }
 
 void AZSWeaponBase::SetMagazineOffset(const FVector& Offset, const FRotator& Rotation)
@@ -462,12 +481,24 @@ void AZSWeaponBase::PlayShotEffects(bool bAimed)
 	{
 		GunAnim->PlayAction(Loaded.WeaponFire, 1.f, 0.02f, 0.08f);
 	}
-	if (Loaded.MuzzleFlash)
+	if (Loaded.MuzzleFlash && CVarZSMuzzleFX.GetValueOnGameThread() != 0)
 	{
 		const bool bSocket = WeaponMesh->DoesSocketExist(AnimSet.MuzzleSocket);
-		UNiagaraFunctionLibrary::SpawnSystemAttached(Loaded.MuzzleFlash, WeaponMesh, bSocket ? AnimSet.MuzzleSocket : NAME_None,
+		UNiagaraComponent* FX = UNiagaraFunctionLibrary::SpawnSystemAttached(Loaded.MuzzleFlash, WeaponMesh, bSocket ? AnimSet.MuzzleSocket : NAME_None,
 			bSocket ? FVector::ZeroVector : AnimSet.MuzzleOffset, FRotator::ZeroRotator,
 			bSocket ? EAttachLocation::SnapToTarget : EAttachLocation::KeepRelativeOffset, true);
+		// The pack's smoke emitter drifts metres downrange from the first-person muzzle and lights up as a big pink cloud
+		// in daylight (worst with automatic fire). Keep the flame, drop the smoke.
+		if (FX && CVarZSMuzzleFX.GetValueOnGameThread() < 2)
+		{
+			for (const FNiagaraEmitterHandle& H : Loaded.MuzzleFlash->GetEmitterHandles())
+			{
+				if (H.GetName().ToString().Contains(TEXT("Smoke")))
+				{
+					FX->SetEmitterEnable(H.GetName(), false);
+				}
+			}
+		}
 	}
 }
 

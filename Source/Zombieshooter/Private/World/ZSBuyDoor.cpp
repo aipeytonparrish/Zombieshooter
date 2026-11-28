@@ -1,4 +1,5 @@
 #include "World/ZSBuyDoor.h"
+#include "Weapons/ZSWeaponTypes.h"
 #include "Player/ZSPlayerCharacter.h"
 #include "Rounds/ZSGameMode_Survival.h"
 #include "Rounds/ZSGameState_Survival.h"
@@ -170,6 +171,7 @@ void AZSBuyDoor::Open()
 		B->SetCollisionProfileName(TEXT("PhysicsActor"));
 		B->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 		B->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+		B->SetCollisionResponseToChannel(ZS_TRACE_WEAPON, ECR_Ignore);
 		B->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		B->SetSimulatePhysics(true);
 		B->AddImpulse((Out * FMath::FRandRange(250.f, 450.f) + FVector(0.f, FMath::FRandRange(-80.f, 80.f), FMath::FRandRange(50.f, 150.f))), NAME_None, true);

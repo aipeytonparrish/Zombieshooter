@@ -1,4 +1,5 @@
 #include "World/ZSPickup.h"
+#include "Weapons/ZSWeaponTypes.h"
 #include "Missions/ZSMissionSubsystem.h"
 #include "Player/ZSPlayerCharacter.h"
 #include "Combat/ZSHealthComponent.h"
@@ -22,6 +23,10 @@ AZSPickup::AZSPickup()
 	Trigger = CreateDefaultSubobject<USphereComponent>(TEXT("Trigger"));
 	Trigger->InitSphereRadius(75.f);
 	Trigger->SetCollisionProfileName(TEXT("OverlapAllDynamic"));
+	// The weapon channel defaults to Block, so without this a pickup's 75 cm sphere ate every bullet aimed at the
+	// legs / belly of zombies walking over it (pickups drop where zombies die, right in the horde's path).
+	Trigger->SetCollisionResponseToChannel(ZS_TRACE_WEAPON, ECR_Ignore);
+	Trigger->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
 	RootComponent = Trigger;
 
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
@@ -35,6 +40,8 @@ AZSPickup::AZSPickup()
 	Glow->SetIntensity(30.f);
 	Glow->SetAttenuationRadius(220.f);
 	Glow->SetCastShadows(false);
+	// No fog scattering: in volumetric fog a power-up's light lit a pink/red cloud metres wide around it.
+	Glow->SetVolumetricScatteringIntensity(0.f);
 
 	Label = CreateDefaultSubobject<UTextRenderComponent>(TEXT("Label"));
 	Label->SetupAttachment(Trigger);
@@ -66,8 +73,8 @@ void AZSPickup::BeginPlay()
 			Mesh->SetMaterial(0, MID);
 		}
 		Glow->SetLightColor(C);
-		Glow->SetIntensity(70.f);
-		Glow->SetAttenuationRadius(400.f);
+		Glow->SetIntensity(35.f);
+		Glow->SetAttenuationRadius(300.f);
 		Label->SetText(AZSGameState_Survival::PowerUpName(PU));
 		Label->SetTextRenderColor(C.ToFColor(true));
 		Label->SetVisibility(true);

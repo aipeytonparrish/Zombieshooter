@@ -1,4 +1,5 @@
 #include "Zombies/ZSSpitProjectile.h"
+#include "Weapons/ZSWeaponTypes.h"
 #include "Combat/ZSGoreSubsystem.h"
 #include "Player/ZSPlayerCharacter.h"
 #include "Components/SphereComponent.h"
@@ -34,6 +35,7 @@ AZSSpitProjectile::AZSSpitProjectile()
 	Collision->InitSphereRadius(12.f);
 	Collision->SetCollisionProfileName(TEXT("BlockAllDynamic"));
 	Collision->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+	Collision->SetCollisionResponseToChannel(ZS_TRACE_WEAPON, ECR_Ignore);
 	Collision->SetNotifyRigidBodyCollision(true);
 	RootComponent = Collision;
 

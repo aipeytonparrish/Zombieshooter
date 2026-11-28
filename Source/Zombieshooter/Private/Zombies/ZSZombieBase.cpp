@@ -681,7 +681,7 @@ float AZSZombieBase::TakeDamage(float DamageAmount, const FDamageEvent& DamageEv
 		{
 			Blood->SpawnHitBlood(LastHitLocation, LastHitDirection, bLastHitHead ? 1.6f : 1.f);
 		}
-		AddBloodiness(0.05f + DamageAmount / FMath::Max(1.f, Health->MaxHealth) * 0.3f);
+		AddWound(LastHitLocation, LastHitBone, bLastHitHead ? 6.5f : FMath::Clamp(6.f + DamageAmount * 0.07f, 6.f, 11.f), LastHitDirection);
 	}
 	LastHitDamage = DamageAmount;
 	const bool bLethal = DamageAmount >= Health->GetHealth();
@@ -699,7 +699,7 @@ float AZSZombieBase::TakeDamage(float DamageAmount, const FDamageEvent& DamageEv
 			bool bCut = false;
 			if (bHead)
 			{
-				bCut = bLethal && (DamageAmount >= 70.f || (bBigHit && FMath::FRand() < 0.55f));
+				bCut = bLethal;   // a killing headshot always pops the head
 			}
 			else
 			{
@@ -798,25 +798,242 @@ void AZSZombieBase::HandleDeath(UZSHealthComponent* InHealth, AController* Kille
 	SetLifeSpan(CorpseLifetime);
 }
 
-void AZSZombieBase::AddBloodiness(float Amount)
+UMaterialInstanceDynamic* AZSZombieBase::EnsureBloodOverlay()
 {
-	if (!UZSGoreSubsystem::BloodEnabled())
+	if (BloodMID)
+	{
+		return BloodMID;
+	}
+	UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ZS/Materials/M_ZS_BloodOverlay.M_ZS_BloodOverlay"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	if (!Base)
+	{
+		return nullptr;
+	}
+	BloodMID = UMaterialInstanceDynamic::Create(Base, this);
+	BloodMID->SetScalarParameterValue(TEXT("Seed"), FMath::FRandRange(0.f, 100.f));
+	// Specials / the boss wear a rim-glow overlay (M_ZS_Glow); the wound overlay carries it on so they keep their look.
+	if (const UMaterialInstanceDynamic* Glow = Cast<UMaterialInstanceDynamic>(GetMesh()->GetOverlayMaterial()))
+	{
+		FLinearColor GlowColor = FLinearColor::Black;
+		float GlowOpacity = 0.f;
+		float Fresnel = 2.5f;
+		Glow->GetVectorParameterValue(FHashedMaterialParameterInfo(TEXT("Color")), GlowColor);
+		Glow->GetScalarParameterValue(FHashedMaterialParameterInfo(TEXT("Opacity")), GlowOpacity);
+		Glow->GetScalarParameterValue(FHashedMaterialParameterInfo(TEXT("Fresnel")), Fresnel);
+		BloodMID->SetVectorParameterValue(TEXT("GlowColor"), GlowColor);
+		BloodMID->SetScalarParameterValue(TEXT("GlowOpacity"), GlowOpacity);
+		BloodMID->SetScalarParameterValue(TEXT("Fresnel"), Fresnel);
+	}
+	GetMesh()->SetOverlayMaterial(BloodMID);
+	return BloodMID;
+}
+
+void AZSZombieBase::AddWound(const FVector& WorldPoint, FName Bone, float Radius, const FVector& ShotDir)
+{
+	if (!UZSGoreSubsystem::BloodEnabled() || Bone == NAME_None)
 	{
 		return;
 	}
-	if (!BloodMID)
+	USkeletalMeshComponent* M = GetMesh();
+	const USkeletalMesh* Asset = M ? M->GetSkeletalMeshAsset() : nullptr;
+	const int32 BoneIndex = M ? M->GetBoneIndex(Bone) : INDEX_NONE;
+	if (!Asset || BoneIndex == INDEX_NONE)
 	{
-		UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ZS/Materials/M_ZS_BloodOverlay.M_ZS_BloodOverlay"), nullptr, LOAD_NoWarn | LOAD_Quiet);
-		if (!Base)
+		return;
+	}
+	UMaterialInstanceDynamic* MID = EnsureBloodOverlay();
+	if (!MID)
+	{
+		return;
+	}
+	// World point -> the bone's space now -> the same spot in the reference (bind) pose = the material's pre-skinned space.
+	// The wound is the bullet's path through the part: centred a little inside (the hit boxes sit under the clothes) and
+	// long enough to come out the other side, so the stain shows where it went in and where it came out.
+	const FString B = Bone.ToString().ToLower();
+	const bool bTorso = B.Contains(TEXT("spine")) || B.Contains(TEXT("pelvis")) || B.Contains(TEXT("clavicle"));
+	const bool bHeadPart = B.Contains(TEXT("head")) || B.Contains(TEXT("neck"));
+	const float Depth = bTorso ? 11.f : (bHeadPart ? 7.f : 4.f);
+	const float HalfLen = bTorso ? 21.f : (bHeadPart ? 13.f : 9.f);
+	const FVector Dir = ShotDir.GetSafeNormal();
+	const FTransform BoneNow = M->GetBoneTransform(BoneIndex);
+	const FVector Scale3D = M->GetComponentScale();
+	const float S = FMath::Max(Scale3D.X, KINDA_SMALL_NUMBER);
+	const FVector InBone = BoneNow.InverseTransformPosition(WorldPoint + Dir * Depth * S);
+	const FVector DirInBone = BoneNow.InverseTransformVectorNoScale(Dir);
+	const FReferenceSkeleton& Ref = Asset->GetRefSkeleton();
+	FTransform RefCS = FTransform::Identity;
+	for (int32 i = BoneIndex; i != INDEX_NONE; i = Ref.GetParentIndex(i))
+	{
+		RefCS = RefCS * Ref.GetRefBonePose()[i];
+	}
+	const FVector P = RefCS.TransformPosition(InBone);
+	const FVector Axis = Dir.IsNearlyZero() ? FVector::ZeroVector : RefCS.TransformVectorNoScale(DirInBone) * HalfLen;
+
+	// A hit close to an existing wound opens that one up instead of using a new slot.
+	for (int32 i = 0; i < Wounds.Num(); ++i)
+	{
+		FVector4& W = Wounds[i];
+		if (FVector::Dist(FVector(W.X, W.Y, W.Z), P) < W.W * 0.6f)
 		{
+			W.W = FMath::Min(W.W + Radius * 0.15f, 12.f);
+			MID->SetScalarParameterValue(*FString::Printf(TEXT("R%d"), i), W.W);
 			return;
 		}
-		BloodMID = UMaterialInstanceDynamic::Create(Base, this);
-		BloodMID->SetScalarParameterValue(TEXT("Seed"), FMath::FRandRange(0.f, 100.f));
-		GetMesh()->SetOverlayMaterial(BloodMID);
 	}
-	Bloodiness = FMath::Min(0.42f, Bloodiness + Amount);
-	BloodMID->SetScalarParameterValue(TEXT("Amount"), Bloodiness);
+	int32 Slot = Wounds.Num();
+	if (Slot >= 8)
+	{
+		Slot = NextWound;
+		NextWound = (NextWound + 1) % 8;
+	}
+	else
+	{
+		Wounds.AddDefaulted();
+	}
+	Wounds[Slot] = FVector4(P.X, P.Y, P.Z, Radius);
+	MID->SetVectorParameterValue(*FString::Printf(TEXT("W%d"), Slot), FLinearColor(P.X, P.Y, P.Z, 0.f));
+	MID->SetVectorParameterValue(*FString::Printf(TEXT("D%d"), Slot), FLinearColor(Axis.X, Axis.Y, Axis.Z, 0.f));
+	MID->SetScalarParameterValue(*FString::Printf(TEXT("R%d"), Slot), Radius);
+}
+
+void AZSZombieBase::BuildHitCapsules()
+{
+	bHitCapsulesBuilt = true;
+	HitCapsules.Reset();
+	const USkeletalMeshComponent* M = GetMesh();
+	if (!M || !M->GetSkeletalMeshAsset())
+	{
+		return;
+	}
+	auto Idx = [M](const TCHAR* Name) { return M->GetBoneIndex(FName(Name)); };
+	auto Seg = [&](const TCHAR* A, const TCHAR* B, float R)
+	{
+		FHitCapsule C;
+		C.Bone = Idx(A);
+		C.To = Idx(B);
+		C.Radius = R;
+		if (C.Bone != INDEX_NONE && C.To != INDEX_NONE) { HitCapsules.Add(C); }
+	};
+	auto Tip = [&](const TCHAR* From, const TCHAR* Bone, float Off0, float Off1, float R)
+	{
+		FHitCapsule C;
+		C.From = Idx(From);
+		C.Bone = Idx(Bone);
+		C.Off0 = Off0;
+		C.Off1 = Off1;
+		C.Radius = R;
+		if (C.Bone != INDEX_NONE && C.From != INDEX_NONE) { HitCapsules.Add(C); }
+	};
+	// Sized to the zombie meshes (UE4-mannequin skeletons), a touch under the drawn silhouette so a miss still misses.
+	Seg(TEXT("pelvis"), TEXT("spine_01"), 15.f);
+	Seg(TEXT("spine_01"), TEXT("spine_02"), 15.f);
+	Seg(TEXT("spine_02"), TEXT("spine_03"), 16.f);
+	Seg(TEXT("spine_03"), TEXT("neck_01"), 15.f);
+	Seg(TEXT("neck_01"), TEXT("head"), 6.5f);
+	Tip(TEXT("neck_01"), TEXT("head"), 3.f, 15.f, 10.f);
+	for (const TCHAR* Side : { TEXT("_l"), TEXT("_r") })
+	{
+		const FString S(Side);
+		Seg(*(TEXT("clavicle") + S), *(TEXT("upperarm") + S), 8.f);
+		Seg(*(TEXT("upperarm") + S), *(TEXT("lowerarm") + S), 6.5f);
+		Seg(*(TEXT("lowerarm") + S), *(TEXT("hand") + S), 5.f);
+		Tip(*(TEXT("lowerarm") + S), *(TEXT("hand") + S), 0.f, 10.f, 4.5f);
+		Seg(*(TEXT("thigh") + S), *(TEXT("calf") + S), 9.f);
+		Seg(*(TEXT("calf") + S), *(TEXT("foot") + S), 6.5f);
+		Seg(*(TEXT("foot") + S), *(TEXT("ball") + S), 5.f);
+	}
+}
+
+bool AZSZombieBase::TraceBody(const FVector& Start, const FVector& End, FHitResult& OutHit)
+{
+	USkeletalMeshComponent* M = GetMesh();
+	if (State == EZSZombieState::Dead || !M || !M->GetSkeletalMeshAsset())
+	{
+		return false;
+	}
+	const UCapsuleComponent* Cap = GetCapsuleComponent();
+	if (FMath::PointDistToSegment(Cap->GetComponentLocation(), Start, End) > Cap->GetScaledCapsuleHalfHeight() + 80.f)
+	{
+		return false;   // nowhere near
+	}
+	if (!bHitCapsulesBuilt)
+	{
+		BuildHitCapsules();
+	}
+	const FVector Ray = End - Start;
+	const float Len = Ray.Size();
+	if (Len < 1.f)
+	{
+		return false;
+	}
+	const FVector Dir = Ray / Len;
+	const float Scale = M->GetComponentScale().X;
+	const FReferenceSkeleton& Ref = M->GetSkeletalMeshAsset()->GetRefSkeleton();
+
+	float Best = Len;
+	const FHitCapsule* BestCap = nullptr;
+	FVector BestAxis = FVector::ZeroVector;
+	for (const FHitCapsule& C : HitCapsules)
+	{
+		bool bGone = false;
+		for (const FName& Cut : Severed)
+		{
+			const int32 CutIndex = Ref.FindBoneIndex(Cut);
+			if (CutIndex != INDEX_NONE && (C.Bone == CutIndex || Ref.BoneIsChildOf(C.Bone, CutIndex)))
+			{
+				bGone = true;
+				break;
+			}
+		}
+		if (bGone)
+		{
+			continue;
+		}
+		const FVector PB = M->GetBoneTransform(C.Bone).GetLocation();
+		FVector A = PB, B;
+		if (C.To != INDEX_NONE)
+		{
+			B = M->GetBoneTransform(C.To).GetLocation();
+		}
+		else
+		{
+			const FVector D = (PB - M->GetBoneTransform(C.From).GetLocation()).GetSafeNormal();
+			A = PB + D * C.Off0 * Scale;
+			B = PB + D * C.Off1 * Scale;
+		}
+		const float R = C.Radius * Scale;
+		FVector OnRay, OnAxis;
+		FMath::SegmentDistToSegmentSafe(Start, End, A, B, OnRay, OnAxis);
+		const float DistSq = FVector::DistSquared(OnRay, OnAxis);
+		if (DistSq > R * R)
+		{
+			continue;
+		}
+		// Back up from the closest approach to roughly where the ray enters the capsule.
+		const float SinT = FMath::Max(0.35f, FVector::CrossProduct(Dir, (B - A).GetSafeNormal()).Size());
+		const float T = FMath::Max(0.f, FVector::Dist(Start, OnRay) - FMath::Sqrt(R * R - DistSq) / SinT);
+		if (T < Best)
+		{
+			Best = T;
+			BestCap = &C;
+			BestAxis = OnAxis;
+		}
+	}
+	if (!BestCap)
+	{
+		return false;
+	}
+	const FVector Where = Start + Dir * Best;
+	OutHit = FHitResult(this, M, Where, (Where - BestAxis).GetSafeNormal());
+	OutHit.ImpactPoint = Where;
+	OutHit.ImpactNormal = OutHit.Normal;
+	OutHit.TraceStart = Start;
+	OutHit.TraceEnd = End;
+	OutHit.Distance = Best;
+	OutHit.Time = Best / Len;
+	OutHit.bBlockingHit = true;
+	OutHit.BoneName = Ref.GetBoneName(BestCap->Bone);
+	return true;
 }
 
 void AZSZombieBase::StartPhysicalHit(FName Bone, const FVector& Direction, float Damage)
@@ -1287,6 +1504,11 @@ void AZSZombieBase::Sever(FName Bone, const FVector& Direction)
 		const bool bHead = Bone == TEXT("head");
 		Gore->SpawnGibs(Where, Direction, bHead ? 3 : 1, bHead ? 0.6f : 0.5f);   // a few small bits, the real part flies off
 		Gore->AddStump(MeshComp, Bone, bHead ? 3.f : 2.2f);
+		const int32 Parent = MeshComp->GetBoneIndex(MeshComp->GetParentBone(Bone));
+		if (Parent != INDEX_NONE)
+		{
+			AddWound(Where, MeshComp->GetBoneName(Parent), bHead ? 13.f : 10.f);   // blood down the neck / around the stump
+		}
 		Gore->SplatterNearCamera(Where, 380.f, bHead ? 0.7f : 0.45f);
 	}
 }

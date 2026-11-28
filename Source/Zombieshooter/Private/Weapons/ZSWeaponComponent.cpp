@@ -28,6 +28,7 @@
 #include "GameFramework/DamageType.h"
 #include "Kismet/GameplayStatics.h"
 #include "DrawDebugHelpers.h"
+#include "Zombies/ZSZombieBase.h"
 #include "HAL/IConsoleManager.h"
 #include "Zombieshooter.h"
 
@@ -947,6 +948,42 @@ void UZSWeaponComponent::PlayHitConfirm(bool bKill, bool bHead)
 	}
 }
 
+namespace
+{
+	/**
+	 * Skeleton hit test for every live zombie the segment passes: catches shots that land on the drawn body where the
+	 * physics asset has a gap (shoulders, torso edges). Returns the nearest such hit closer than MaxDist, skipping the
+	 * actor the physics trace already hit (its own hit is the precise one) and anything already passed through.
+	 */
+	bool TraceZombieBodies(UWorld* World, const FVector& Start, const FVector& Dir, float MaxDist, const AActor* PhysicsHitActor,
+		const TArray<AActor*>& Passed, FHitResult& OutHit)
+	{
+		UZSAimAssistSubsystem* Registry = World->GetSubsystem<UZSAimAssistSubsystem>();
+		if (!Registry)
+		{
+			return false;
+		}
+		bool bFound = false;
+		float Best = MaxDist;
+		for (const FZSAimTarget& T : Registry->GetTargets())
+		{
+			AZSZombieBase* Z = Cast<AZSZombieBase>(T.Actor.Get());
+			if (!Z || Z == PhysicsHitActor || Z->IsDead() || Passed.Contains(Z))
+			{
+				continue;
+			}
+			FHitResult H;
+			if (Z->TraceBody(Start, Start + Dir * Best, H) && H.Distance < Best)
+			{
+				Best = H.Distance;
+				OutHit = H;
+				bFound = true;
+			}
+		}
+		return bFound;
+	}
+}
+
 void UZSWeaponComponent::TraceBullet(const FVector& Start, const FVector& Direction, float BaseDamage)
 {
 	UWorld* World = GetWorld();
@@ -966,12 +1003,25 @@ void UZSWeaponComponent::TraceBullet(const FVector& Start, const FVector& Direct
 	float Damage = BaseDamage;
 	float DepthLeft = S.PenetrationDepth;
 	int32 Penetrations = 0;
+	TArray<AActor*> Passed;   // bodies the bullet already went through
 
 	while (Travelled < S.MaxRange)
 	{
 		const FVector End = SegmentStart + Direction * (S.MaxRange - Travelled);
 		FHitResult Hit;
-		if (!World->LineTraceSingleByChannel(Hit, SegmentStart, End, ZS_TRACE_WEAPON, Params))
+		bool bHit = World->LineTraceSingleByChannel(Hit, SegmentStart, End, ZS_TRACE_WEAPON, Params);
+		FHitResult BodyHit;
+		if (TraceZombieBodies(World, SegmentStart, Direction, bHit ? Hit.Distance : (S.MaxRange - Travelled), bHit ? Hit.GetActor() : nullptr, Passed, BodyHit))
+		{
+			if (CVarZSLogHits.GetValueOnGameThread())
+			{
+				UE_LOG(LogZS, Warning, TEXT("Skeleton hit %s bone %s (physics trace: %s)"), *GetNameSafe(BodyHit.GetActor()), *BodyHit.BoneName.ToString(),
+					bHit ? *GetNameSafe(Hit.GetActor()) : TEXT("nothing"));
+			}
+			Hit = BodyHit;
+			bHit = true;
+		}
+		if (!bHit)
 		{
 			if (DebugMode >= 2)
 			{
@@ -997,6 +1047,19 @@ void UZSWeaponComponent::TraceBullet(const FVector& Start, const FVector& Direct
 		AActor* HitActor = Hit.GetActor();
 		UZSHealthComponent* Health = UZSHealthComponent::FindOn(HitActor);
 
+		if (Health && Health->IsDead())
+		{
+			// A corpse (or a body still falling): a splash of blood, and the bullet carries on at full strength. Corpses
+			// used to cost a penetration and 40% damage, so a pile of bodies could swallow shots at the live zombie behind.
+			if (UZSBloodSubsystem* FX = World->GetSubsystem<UZSBloodSubsystem>())
+			{
+				FX->SpawnHitBlood(Hit.ImpactPoint, Direction, 0.5f);
+			}
+			Params.AddIgnoredActor(HitActor);
+			Passed.Add(HitActor);
+			SegmentStart = Hit.ImpactPoint + Direction * 1.f;
+			continue;
+		}
 		if (Health)
 		{
 			// Hit zone from bone name or component tag.
@@ -1029,6 +1092,7 @@ void UZSWeaponComponent::TraceBullet(const FVector& Start, const FVector& Direct
 
 			// Bullets pass through bodies (zombie piles), losing damage.
 			Params.AddIgnoredActor(HitActor);
+			Passed.Add(HitActor);
 			SegmentStart = Hit.ImpactPoint + Direction * 1.f;
 			Damage *= S.PenetrationDamageMultiplier;
 			if (++Penetrations > S.MaxPenetrations)

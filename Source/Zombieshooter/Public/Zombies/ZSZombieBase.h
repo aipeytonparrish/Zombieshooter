@@ -280,6 +280,8 @@ private:
 	/** Barricade logic (walk to the window, tear boards, climb in). True while it owns the zombie's frame. */
 	bool UpdateBarricade(float DeltaSeconds);
 	float TearTimer = 0.f;
+	float BarricadeStuck = 0.f;
+	int32 NoProgressStrikes = 0;
 	float VaultTime = -1.f;
 	FVector VaultStart = FVector::ZeroVector;
 

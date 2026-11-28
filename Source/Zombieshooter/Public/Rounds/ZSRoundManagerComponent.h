@@ -98,7 +98,7 @@ public:
 
 	/** A zombie that has made no progress towards the player for a while (stuck on debris, lost behind a wall) is
 	 *  moved to a fresh spawn point out of view. Returns false if it was left where it is (no point, or visible). */
-	bool RelocateStraggler(AZSZombieBase* Zombie);
+	bool RelocateStraggler(AZSZombieBase* Zombie, bool bForce = false);
 
 	/** Horde surges: from this round on, every SurgeInterval seconds of a round a burst of zombies arrives at once. */
 	UPROPERTY(EditAnywhere, Category = "ZS|Rounds")

@@ -250,9 +250,9 @@ void UZSRoundManagerComponent::OpenZone(FName Zone)
 	}
 }
 
-bool UZSRoundManagerComponent::RelocateStraggler(AZSZombieBase* Zombie)
+bool UZSRoundManagerComponent::RelocateStraggler(AZSZombieBase* Zombie, bool bForce)
 {
-	if (!Zombie || Zombie->IsDead() || IsVisibleToPlayer(Zombie->GetActorLocation()))
+	if (!Zombie || Zombie->IsDead() || (!bForce && IsVisibleToPlayer(Zombie->GetActorLocation())))
 	{
 		return false;
 	}

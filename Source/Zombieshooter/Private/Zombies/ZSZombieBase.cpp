@@ -416,11 +416,14 @@ void AZSZombieBase::UpdateChase(float DeltaSeconds)
 		const bool bNoProgress = Dist2D > 700.f && Dist2D > ProgressStartDist - 150.f;
 		ProgressTimer = 0.f;
 		ProgressStartDist = Dist2D;
+		NoProgressStrikes = bNoProgress ? NoProgressStrikes + 1 : 0;
 		if (bNoProgress && !IsBoss())
 		{
 			if (AZSGameMode_Survival* GM = GetWorld()->GetAuthGameMode<AZSGameMode_Survival>())
 			{
-				if (GM->GetRoundManager() && GM->GetRoundManager()->RelocateStraggler(this))
+				// Out of view: move it right away. Stuck in plain sight for ~24 s (snagged on rubble you can see through a
+				// window): move it anyway, or the round never ends.
+				if (GM->GetRoundManager() && GM->GetRoundManager()->RelocateStraggler(this, NoProgressStrikes >= 3))
 				{
 					ProgressStartDist = 1.e9f;
 					RepathTimer = 0.f;
@@ -513,6 +516,14 @@ bool AZSZombieBase::UpdateBarricade(float DeltaSeconds)
 	const FVector ToOut = Out - GetActorLocation();
 	if (ToOut.Size2D() > 60.f)
 	{
+		// Snagged on the way to the window (rubble, a car outside): after a few seconds without moving, snap to it.
+		BarricadeStuck = GetVelocity().Size2D() < 25.f ? BarricadeStuck + DeltaSeconds : 0.f;
+		if (BarricadeStuck > 4.f)
+		{
+			BarricadeStuck = 0.f;
+			TeleportTo(Out, FRotator(0.f, (B->GetInsidePoint() - Out).Rotation().Yaw, 0.f));
+			return true;
+		}
 		RepathTimer -= DeltaSeconds;
 		if (RepathTimer <= 0.f)
 		{

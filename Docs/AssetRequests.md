@@ -140,6 +140,8 @@ decals, and the 10 missing Textures.com maps from the .blend (`TexturesCom_Marbl
 scene's debris piles are low-poly by design and are the roughest-looking thing left in the street.
 **Thunder** one-shots (2–4 variations) for the lightning, and a **wood / metal barricade break** sound for the
 safehouse door and the window barricades (a board being ripped off, a board being nailed back).
+**Camp ambience:** a fire crackle loop and distant city wind for the Rooftop.
+**Camp props:** tents, crates, cots, a radio, cooking gear (any survival-camp prop pack).
 **Movement foley:** footsteps (concrete, metal grate, dirt), a **slide** scrape loop, landing thumps.
 **Props for the compound:** crates / pallets / shelving / lockers / desks / a generator (industrial or warehouse prop
 pack) — the warehouse and rooms are mostly bare walls and pillars right now.

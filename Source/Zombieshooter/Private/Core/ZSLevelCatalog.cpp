@@ -28,6 +28,6 @@ namespace ZSLevelCatalog
 
 	const TCHAR* BunkerURL()
 	{
-		return TEXT("/Game/ZS/Maps/L_Bunker");
+		return TEXT("/Game/ZS/Maps/L_Rooftop");   // the safe house (L_Bunker is the old one)
 	}
 }

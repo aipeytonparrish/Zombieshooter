@@ -596,7 +596,7 @@ void AZSHUD::DrawBunker(AZSBunkerGameMode* GM, float Scale)
 		DrawText(Text, Color, X, Y, Font, TextScale * Scale);
 		Y += 30.f * TextScale * Scale;
 	};
-	Line(TEXT("THE BUNKER"), 1.8f, HeadGold);
+	Line(GetWorld()->GetMapName().Contains(TEXT("Rooftop")) ? TEXT("THE ROOFTOP") : TEXT("THE BUNKER"), 1.8f, HeadGold);
 	Line(FString::Printf(TEXT("LEVEL %d"), Profile->GetLevel()), 1.4f, HudWhite);
 	if (const int32 Rank = Profile->GetPrestige())
 	{

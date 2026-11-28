@@ -17,6 +17,7 @@ import unreal
 sys.path.append(os.path.dirname(__file__))
 import zs_import_common as zs  # noqa: E402
 import nyc_compound  # noqa: E402
+import nyc_dressing  # noqa: E402
 
 MAP = "/Game/ZS/Maps/L_NYC"
 ART = "/Game/NYC_PostApoc/Maps/L_NYC_Art"
@@ -240,6 +241,11 @@ if zs.eal.does_asset_exist(ART):
     zs.log("NYC art level streamed in: " + ART)
 else:
     zs.log("WARNING: " + ART + " missing - run import_postapoc_ny.py (the map will be empty)")
+
+# Street furniture, fires and old blood (after the art is in, so props sit on its ground).
+rooms = [(nyc_compound.wx(a), nyc_compound.wy(b), nyc_compound.wx(c), nyc_compound.wy(d))
+         for name, (a, b, c, d), *_ in nyc_compound.ROOMS if name != "Courtyard"]
+nyc_dressing.dress(eas, rooms)
 
 les.save_current_level()
 zs.log("Saved " + MAP)

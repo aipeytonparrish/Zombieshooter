@@ -13,6 +13,7 @@
 #include "HAL/IConsoleManager.h"
 #include "Engine/World.h"
 #include "Zombies/ZSZombieBase.h"
+#include "Player/ZSCameraComponent.h"
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/DamageType.h"
@@ -25,6 +26,9 @@
 #include "Bunker/ZSBunkerMenus.h"
 #include "Engine/DamageEvents.h"
 #include "Rounds/ZSRunTaskComponent.h"
+#include "Combat/ZSHealthComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "PhysicsEngine/BodyInstance.h"
 #include "Zombieshooter.h"
 #include "World/ZSBuyDoor.h"
 
@@ -414,6 +418,34 @@ void AZSPlayerController::StartAutoShotIfRequested()
 		}), 0.48f, true, 1.f);
 	}
 
+	// -ZSAutoAim: keep the view on the nearest live zombie's chest (repeatable damage tests).
+	if (FParse::Param(Cmd, TEXT("ZSAutoAim")))
+	{
+		FTimerHandle AimTimer;
+		GetWorldTimerManager().SetTimer(AimTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			const AZSPlayerCharacter* Char = Cast<AZSPlayerCharacter>(GetPawn());
+			if (!Char) { return; }
+			const FVector Eye = Char->GetFirstPersonCamera()->GetComponentLocation();
+			const AZSZombieBase* Best = nullptr;
+			float BestD = 1.e9f;
+			for (TActorIterator<AZSZombieBase> It(GetWorld()); It; ++It)
+			{
+				const float D = FVector::Dist(It->GetActorLocation(), Eye);
+				if (It->IsDead() || D >= BestD) { continue; }
+				FHitResult Hit;
+				FCollisionQueryParams Q(SCENE_QUERY_STAT(ZSAutoAim), false, Char);
+				const FVector Chest = It->GetMesh()->GetBoneLocation(TEXT("spine_02"));
+				if (GetWorld()->LineTraceSingleByChannel(Hit, Eye, Chest, ECC_Visibility, Q) && Hit.GetActor() != *It) { continue; }   // behind a wall
+				Best = *It; BestD = D;
+			}
+			if (Best)
+			{
+				SetControlRotation((Best->GetMesh()->GetBoneLocation(TEXT("spine_02")) - Eye).Rotation());
+			}
+		}), 0.02f, true);
+	}
+
 	// Core ticker (not world timers) so the shot and quit still happen while the game is paused.
 	TWeakObjectPtr<AZSPlayerController> WeakThis(this);
 	FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([WeakThis](float)
@@ -506,9 +538,19 @@ void AZSPlayerController::ZSZombieInfo()
 	for (TActorIterator<AZSZombieBase> It(GetWorld()); It; ++It)
 	{
 		const AZSZombieBase* Z = *It;
-		UE_LOG(LogZS, Warning, TEXT("Zombie %s: dist %.0f state %d speed %.0f %s at %s"), *Z->GetName(),
+		// Hit-box drift: where the spine's physics body is vs where the animated bone is drawn.
+		float Drift = -1.f;
+		if (const USkeletalMeshComponent* M = Z->GetMesh())
+		{
+			if (const FBodyInstance* BI = M->GetBodyInstance(TEXT("spine_02")))
+			{
+				Drift = FVector::Dist(BI->GetUnrealWorldTransform().GetLocation(), M->GetBoneLocation(TEXT("spine_02")));
+			}
+		}
+		const UZSHealthComponent* HC = UZSHealthComponent::FindOn(Z);
+		UE_LOG(LogZS, Warning, TEXT("Zombie %s: dist %.0f state %d speed %.0f %s hp %.0f drift %.0f at %s"), *Z->GetName(),
 			P ? FVector::Dist(P->GetActorLocation(), Z->GetActorLocation()) : -1.f, (int32)Z->GetZombieState(),
-			Z->GetVelocity().Size2D(), Z->IsDirectChasing() ? TEXT("DIRECT") : TEXT("NAV"), *Z->GetActorLocation().ToCompactString());
+			Z->GetVelocity().Size2D(), Z->IsDirectChasing() ? TEXT("DIRECT") : TEXT("NAV"), HC ? HC->GetHealth() : -1.f, Drift, *Z->GetActorLocation().ToCompactString());
 		++N;
 	}
 	UE_LOG(LogZS, Warning, TEXT("%d zombies"), N);

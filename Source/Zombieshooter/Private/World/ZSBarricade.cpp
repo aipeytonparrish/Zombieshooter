@@ -38,7 +38,7 @@ FVector AZSBarricade::GetOutsidePoint() const
 
 FVector AZSBarricade::GetSillPoint() const
 {
-	return GetActorLocation() + FVector(0.f, 0.f, SillHeight + 100.f);
+	return GetActorLocation() + FVector(0.f, 0.f, SillHeight + 65.f);   // body almost flat (see the zombie's dive): centre ~0.65 m over the sill
 }
 
 FVector AZSBarricade::GetInsidePoint() const

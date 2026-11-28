@@ -597,3 +597,31 @@ whole compound). Launches with
   the round number painted over a blood smear; the screen drains to black and white near death.
 - **Home base:** a mood volume over the bunker (a stop darker, more contrast, cooler, vignette, grain) and the stations
   are worn-steel benches (they rendered plain white before).
+
+## The Rooftop — the new safe house
+
+The hub between runs is now **The Rooftop** (`L_Rooftop`, built by `Tools/Import/create_rooftop_map.py`): a survivors'
+camp on top of a New York tower at golden hour, ~55 m above the dead city (`L_Bunker` is still there but no longer
+used). It's the game's default map and where runs return to.
+
+- **The camp:** a camp fire with benches, fire barrels, string lights, tarp canopies with bedrolls, a rooftop garden,
+  a water tower, antennas, a flag and a billboard, the closed-off stair house, and the city skyline all round.
+- **The people** (`AZSSurvivorNPC`): Marcus the quartermaster (armory), Rosa the trader (market), Sarge (map table),
+  Doc Avery (medic), Jonah on lookout, Vic the mechanic, and Lena, Teddy and Milo round the fire. Each one idles with
+  a life-like loop from the MC Idles pack (warming hands, arms crossed, wall lean, smoking, music), shows a name tag up
+  close and says a line when you walk up. Bodies are the Survivors Mega Pack; the idle pack's mannequin drives their
+  pose (leader pose), so any MC Idles loop works on any survivor.
+- The five stations work exactly as before (walk up, Interact).
+
+## New York — outside, and the window climb
+
+- Street dressing (`Tools/Import/nyc_dressing.py`): street lights (a few still burning), traffic lights, signs,
+  hydrants, trash, benches, a bus stop, guardrails along the river, dead trees, burning barrels and fires in the rubble,
+  old blood on the street and through the compound.
+- The rubble piles rendered as black shards; their material now uses the Megascans concrete
+  (`import_postapoc_ny.py --materials-only`).
+- Zombies climbing through a window dive through head-first (a standing body clipped through the wall above it).
+- Every local light in the New York and Rooftop maps is shadowless: shadowed point lights with Nanite virtual shadow
+  maps hung the GPU on load.
+- Test helpers: `-ZSAutoAim` keeps the view on the nearest visible zombie (with `-ZSAutoBursts` for damage tests);
+  `ZSZombieInfo` now prints health and hit-box drift.

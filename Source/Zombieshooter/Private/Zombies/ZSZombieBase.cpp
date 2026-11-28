@@ -491,9 +491,14 @@ bool AZSZombieBase::UpdateBarricade(float DeltaSeconds)
 		const FVector Sill = B->GetSillPoint();
 		const FVector End = B->GetInsidePoint();
 		const FVector P = FMath::Lerp(FMath::Lerp(VaultStart, Sill, A), FMath::Lerp(Sill, End, A), A);   // quadratic bezier
-		SetActorLocation(P, false, nullptr, ETeleportType::TeleportPhysics);
+		// Head-first dive: a standing body can't fit a 1.5 m window (it used to clip through the wall above it), so the
+		// zombie pitches forward almost flat over the sill and rights itself as it lands.
+		const float Dive = FMath::Sin(A * PI);
+		const float Yaw = (B->GetInsidePoint() - B->GetOutsidePoint()).Rotation().Yaw;
+		SetActorLocationAndRotation(P, FRotator(-72.f * Dive, Yaw, 0.f), false, nullptr, ETeleportType::TeleportPhysics);
 		if (A >= 1.f)
 		{
+			SetActorRotation(FRotator(0.f, Yaw, 0.f));
 			VaultTime = -1.f;
 			Barricade = nullptr;
 			GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);

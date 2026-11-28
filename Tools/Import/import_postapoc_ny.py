@@ -112,6 +112,48 @@ def fix_materials():
         zs.eal.save_asset(base + name, only_if_is_dirty=False)
         n += 1
     zs.log("fixed %d untextured materials" % n)
+    fix_rubble()
+
+
+RUBBLE_TEX = "/Game/MS_NewYorkCityKitbash_Assets/Textures/T_Concrete03_%s"
+
+
+def fix_rubble():
+    """The scene's debris piles rendered as near-black shards (the glTF base material multiplies by their vertex colours,
+    which are near black). Re-parent their material to the Megascans kitbash concrete, which ignores vertex colour."""
+    mel = unreal.MaterialEditingLibrary
+    concrete = unreal.load_asset("/Game/MS_NewYorkCityKitbash_Assets/Materials/M_Concrete03")
+    color = unreal.load_asset(RUBBLE_TEX % "Base_color")
+    normal = unreal.load_asset(RUBBLE_TEX % "Normal_OpenGL")
+    white = unreal.load_asset("/Engine/EngineResources/WhiteSquareTexture")
+    if not color:
+        zs.log("WARNING: kitbash concrete textures missing - rubble left as imported")
+        return
+    n = 0
+    for path in zs.eal.list_assets(DEST + "/PostApocNY/Materials", recursive=False, include_folder=False):
+        if "debrispilelowres" not in path:
+            continue
+        m = unreal.load_asset(path)
+        if not isinstance(m, unreal.MaterialInstanceConstant):
+            continue
+        if concrete:
+            mel.set_material_instance_parent(m, concrete)
+            zs.eal.save_asset(path, only_if_is_dirty=False)
+            n += 1
+            continue
+        mel.set_material_instance_texture_parameter_value(m, "BaseColorTexture", color)
+        if normal:
+            mel.set_material_instance_texture_parameter_value(m, "NormalTexture", normal)
+        mel.set_material_instance_texture_parameter_value(m, "MetallicRoughnessTexture", white)
+        mel.set_material_instance_texture_parameter_value(m, "OcclusionTexture", white)
+        mel.set_material_instance_vector_parameter_value(m, "BaseColorFactor", unreal.LinearColor(0.62, 0.6, 0.57, 1))
+        mel.set_material_instance_scalar_parameter_value(m, "MetallicFactor", 0.0)
+        mel.set_material_instance_scalar_parameter_value(m, "RoughnessFactor", 1.0)
+        mel.set_material_instance_vector_parameter_value(m, "BaseColorTexture_OffsetScale", unreal.LinearColor(0, 0, 3, 3))
+        mel.set_material_instance_vector_parameter_value(m, "NormalTexture_OffsetScale", unreal.LinearColor(0, 0, 3, 3))
+        zs.eal.save_asset(path, only_if_is_dirty=False)
+        n += 1
+    zs.log("rubble materials fixed: %d" % n)
 
 
 if POST_ONLY:

@@ -111,6 +111,18 @@ public:
 	bool SellWeapon(const FGuid& WeaponId, FText& OutMessage);
 	/** Why this attachment can't be fitted (empty = it can). */
 	FText CanFitAttachment(const FGuid& WeaponId, FName AttachmentId) const;
+
+	// ---- Weapon levels (per gun type: kills with it level it up; levels unlock its attachments and camos) ----
+	static constexpr int32 MaxWeaponLevel = 30;
+	/** XP to go from Level to Level + 1. */
+	static int32 WeaponXPToNext(int32 Level) { return 350 + 150 * (Level - 1); }
+	int32 GetWeaponLevel(FName ItemId) const;
+	/** XP into the current level and the XP that level needs. */
+	void GetWeaponLevelProgress(FName ItemId, int32& OutXP, int32& OutNeeded) const;
+	/** Adds weapon XP; returns a message per level gained (with what it unlocked). */
+	TArray<FText> AddWeaponXP(FName ItemId, int32 Amount);
+	FName GetWeaponCamo(FName ItemId) const;
+	bool SetWeaponCamo(FName ItemId, FName CamoId, FText& OutMessage);
 	bool BuyAttachment(const FGuid& WeaponId, FName AttachmentId, FText& OutMessage);
 	/** Removing scraps the attachment (no refund). */
 	bool RemoveAttachment(const FGuid& WeaponId, FName AttachmentId);

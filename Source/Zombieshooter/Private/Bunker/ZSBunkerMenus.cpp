@@ -232,6 +232,77 @@ namespace ZSBunkerMenus
 		WeakPC->PushMenu(Page);
 	}
 
+	static FText WeaponLevelLine(const UZSProfileSubsystem* Profile, FName ItemId)
+	{
+		int32 XP = 0, Needed = 0;
+		Profile->GetWeaponLevelProgress(ItemId, XP, Needed);
+		const int32 Level = Profile->GetWeaponLevel(ItemId);
+		return Needed > 0
+			? FText::Format(NSLOCTEXT("ZS", "WLvlLine", "LV {0}  ({1}/{2} XP)"), FText::AsNumber(Level), FText::AsNumber(XP), FText::AsNumber(Needed))
+			: FText::Format(NSLOCTEXT("ZS", "WLvlMax", "LV {0}  (MAX)"), FText::AsNumber(Level));
+	}
+
+	static void OpenCamoPage(const FWeakPC& WeakPC, FName ItemId)
+	{
+		FZSMenuPage Page;
+		Page.Refresh = [WeakPC, ItemId](FZSMenuPage& P)
+		{
+			UZSProfileSubsystem* Profile = ProfileOf(WeakPC);
+			if (!Profile) { return; }
+			P.Title = FText::Format(NSLOCTEXT("ZS", "CamoTitle", "{0} CAMOS"), FText::FromString(ZSWeaponCatalog::DisplayName(ItemId).ToString().ToUpper()));
+			P.Subtitle = FText::Format(NSLOCTEXT("ZS", "CamoSub", "{0}   Camos unlock as the gun levels up (kills with it, in any run)"), WeaponLevelLine(Profile, ItemId));
+			P.Items.Reset();
+			const int32 Level = Profile->GetWeaponLevel(ItemId);
+			const FName Current = Profile->GetWeaponCamo(ItemId);
+			for (const ZSWeaponCatalog::FCamo& C : ZSWeaponCatalog::Camos())
+			{
+				const bool bOn = Current == C.Id || (Current.IsNone() && C.Id == TEXT("NONE"));
+				const bool bLocked = Level < C.RequiredLevel;
+				const FName Id = C.Id;
+				P.Items.Emplace(C.DisplayName, [WeakPC, ItemId, Id]()
+				{
+					FText Msg;
+					if (UZSProfileSubsystem* Pr = ProfileOf(WeakPC)) { Pr->SetWeaponCamo(ItemId, Id, Msg); Say(WeakPC, Msg); }
+				}, bOn ? NSLOCTEXT("ZS", "CamoOn", "EQUIPPED") : (bLocked ? FText::Format(NSLOCTEXT("ZS", "CamoLvl", "WEAPON LV {0}"), FText::AsNumber(C.RequiredLevel)) : FText::GetEmpty()),
+					FText::GetEmpty(), !bLocked);
+			}
+			P.Items.Add(BackItem(WeakPC));
+		};
+		WeakPC->PushMenu(Page);
+	}
+
+	static void OpenLevelsPage(const FWeakPC& WeakPC)
+	{
+		FZSMenuPage Page;
+		Page.Title = NSLOCTEXT("ZS", "LevelsTitle", "WEAPON LEVELS");
+		Page.Refresh = [WeakPC](FZSMenuPage& P)
+		{
+			UZSProfileSubsystem* Profile = ProfileOf(WeakPC);
+			if (!Profile) { return; }
+			P.Subtitle = NSLOCTEXT("ZS", "LevelsSub", "Every gun starts at level 1. Kills with it (your own, wall buys, the box) level it up and unlock its attachments and camos.");
+			P.Items.Reset();
+			for (const ZSWeaponCatalog::FEntry& E : ZSWeaponCatalog::All())
+			{
+				const FName Id = E.ItemId;
+				FString Next;
+				const int32 Level = Profile->GetWeaponLevel(Id);
+				for (const FName AttId : E.Attachments)
+				{
+					const ZSWeaponCatalog::FAttachment* A = ZSWeaponCatalog::FindAttachment(AttId);
+					if (A && A->RequiredLevel > Level) { Next += FString::Printf(TEXT("LV %d  %s\n"), A->RequiredLevel, *A->DisplayName.ToString()); }
+				}
+				for (const ZSWeaponCatalog::FCamo& C : ZSWeaponCatalog::Camos())
+				{
+					if (C.RequiredLevel > Level) { Next += FString::Printf(TEXT("LV %d  %s camo\n"), C.RequiredLevel, *C.DisplayName.ToString()); }
+				}
+				P.Items.Emplace(E.DisplayName, [WeakPC, Id]() { OpenCamoPage(WeakPC, Id); }, WeaponLevelLine(Profile, Id),
+					FText::Format(NSLOCTEXT("ZS", "LevelsDetail", "Coming up:\n{0}\nSelect to pick a camo."), FText::FromString(Next.IsEmpty() ? TEXT("Everything unlocked.") : Next)));
+			}
+			P.Items.Add(BackItem(WeakPC));
+		};
+		WeakPC->PushMenu(Page);
+	}
+
 	static void OpenWeaponPage(const FWeakPC& WeakPC, FGuid WeaponId)
 	{
 		FZSMenuPage Page;
@@ -248,8 +319,8 @@ namespace ZSBunkerMenus
 				return;
 			}
 			P.Title = FText::FromString(Profile->DescribeWeapon(WeaponId).ToString().ToUpper());
-			P.Subtitle = FText::Format(NSLOCTEXT("ZS", "WeaponSub", "{0}   Attachments {1}/{2}   (removing an attachment scraps it)"),
-				CashLine(Profile), FText::AsNumber(W->Attachments.Num()), FText::AsNumber(ZSWeaponCatalog::MaxAttachments));
+			P.Subtitle = FText::Format(NSLOCTEXT("ZS", "WeaponSub2", "{0}   {1}   Attachments {2}/{3}   (removing an attachment scraps it)"),
+				CashLine(Profile), WeaponLevelLine(Profile, W->ItemId), FText::AsNumber(W->Attachments.Num()), FText::AsNumber(ZSWeaponCatalog::MaxAttachments));
 			for (const FName AttId : E->Attachments)
 			{
 				const ZSWeaponCatalog::FAttachment* A = ZSWeaponCatalog::FindAttachment(AttId);
@@ -258,7 +329,7 @@ namespace ZSBunkerMenus
 				const FText Why = Profile->CanFitAttachment(WeaponId, AttId);
 				const FText Label = FText::Format(NSLOCTEXT("ZS", "AttLabel", "{0}: {1}"), ZSWeaponCatalog::SlotName(A->Slot), A->DisplayName);
 				FText Value = bFitted ? NSLOCTEXT("ZS", "FittedTag", "FITTED - REMOVE")
-					: (Profile->GetUnlockLevel() < A->RequiredLevel ? FText::Format(NSLOCTEXT("ZS", "LvlTag", "LEVEL {0}"), FText::AsNumber(A->RequiredLevel)) : Money(A->Price));
+					: (Profile->GetWeaponLevel(W->ItemId) < A->RequiredLevel ? FText::Format(NSLOCTEXT("ZS", "WLvlTag", "WEAPON LV {0}"), FText::AsNumber(A->RequiredLevel)) : Money(A->Price));
 				FText Detail = Why.IsEmpty() || bFitted ? A->Description
 					: FText::Format(NSLOCTEXT("ZS", "AttWhy", "{0}\n\n{1}"), A->Description, Why);
 				P.Items.Emplace(Label, [WeakPC, WeaponId, AttId, bFitted]()
@@ -277,6 +348,12 @@ namespace ZSBunkerMenus
 						Say(WeakPC, Msg);
 					}
 				}, Value, Detail, bFitted || Why.IsEmpty());
+			}
+			{
+				const FName ItemId = W->ItemId;
+				const ZSWeaponCatalog::FCamo* Camo = ZSWeaponCatalog::FindCamo(Profile->GetWeaponCamo(ItemId));
+				P.Items.Emplace(NSLOCTEXT("ZS", "CamoItem", "CAMO"), [WeakPC, ItemId]() { OpenCamoPage(WeakPC, ItemId); },
+					Camo ? Camo->DisplayName : NSLOCTEXT("ZS", "CamoFactory", "Factory"), NSLOCTEXT("ZS", "CamoItemDetail", "Pattern for every gun of this type."));
 			}
 			const int32 SellPrice = Profile->GetSellPrice(WeaponId);
 			P.Items.Emplace(NSLOCTEXT("ZS", "SellWeapon", "SELL"), [WeakPC, WeaponId]()
@@ -322,11 +399,13 @@ namespace ZSBunkerMenus
 					[WeakPC, i]() { OpenLoadoutPage(WeakPC, i); },
 					bActive ? NSLOCTEXT("ZS", "Active", "ACTIVE") : FText::GetEmpty(), LoadoutSummary(Profile, i));
 			}
+			P.Items.Emplace(NSLOCTEXT("ZS", "WeaponLevels", "WEAPON LEVELS & CAMOS"), [WeakPC]() { OpenLevelsPage(WeakPC); },
+				FText::GetEmpty(), NSLOCTEXT("ZS", "WeaponLevelsDetail", "Every gun type's level, what it unlocks next, and its camo."));
 			for (const FZSInventoryWeapon& W : Profile->GetWeapons())
 			{
 				const FGuid Id = W.InstanceId;
 				P.Items.Emplace(Profile->DescribeWeapon(Id), [WeakPC, Id]() { OpenWeaponPage(WeakPC, Id); },
-					NSLOCTEXT("ZS", "Modify", "ATTACHMENTS / SELL"), StatCard(W.ItemId, W.Attachments));
+					FText::Format(NSLOCTEXT("ZS", "ModifyLv", "{0}  CUSTOMISE"), WeaponLevelLine(Profile, W.ItemId)), StatCard(W.ItemId, W.Attachments));
 			}
 			P.Items.Add(BackItem(WeakPC));
 		};

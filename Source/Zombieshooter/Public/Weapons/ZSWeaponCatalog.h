@@ -53,6 +53,20 @@ namespace ZSWeaponCatalog
 	ZOMBIESHOOTER_API const FAttachment* FindAttachment(FName Id);
 	ZOMBIESHOOTER_API FText SlotName(EZSAttachmentSlot Slot);
 
+	/** Camos: a pattern overlay on the gun (M_ZS_Camo), unlocked by the gun's level. "NONE" is the factory finish. */
+	struct FCamo
+	{
+		FName Id;
+		FText DisplayName;
+		int32 RequiredLevel = 1;
+		FLinearColor A, B, C;       // pattern colours (dark, mid, light)
+		float Scale = 1.f;          // pattern size
+		float Metal = 0.f;          // 1 = polished metal (gold)
+		float Emissive = 0.f;       // glow (dark matter)
+	};
+	ZOMBIESHOOTER_API const TArray<FCamo>& Camos();
+	ZOMBIESHOOTER_API const FCamo* FindCamo(FName Id);
+
 	/** Max attachments on one gun. */
 	constexpr int32 MaxAttachments = 5;
 }

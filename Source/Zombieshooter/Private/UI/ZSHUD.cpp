@@ -266,7 +266,19 @@ void AZSHUD::DrawAmmo(UZSWeaponComponent* Weapons, float Scale)
 	DrawText(ReserveText, HudShadow, ResX + 2.f, Bottom - ResH - 4.f * Scale + 2.f, Small, 1.8f * Scale);
 	DrawText(ReserveText, LabelColor, ResX, Bottom - ResH - 4.f * Scale, Small, 1.8f * Scale);
 
-	const FString Name = W->Stats.DisplayName.ToString().ToUpper();
+	FString Name = W->Stats.DisplayName.ToString().ToUpper();
+	if (const UZSProfileSubsystem* Pr = UZSProfileSubsystem::Get(this); Pr && !W->ItemId.IsNone())
+	{
+		Name += FString::Printf(TEXT("   LV %d"), Pr->GetWeaponLevel(W->ItemId));
+		int32 XP = 0, Needed = 0;
+		Pr->GetWeaponLevelProgress(W->ItemId, XP, Needed);
+		if (Needed > 0)
+		{
+			const float BarW = 160.f * Scale;
+			DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.6f), CardX + 22.f * Scale, CardY + 40.f * Scale, BarW, 3.f * Scale);
+			DrawRect(FLinearColor(0.95f, 0.75f, 0.3f, 0.9f), CardX + 22.f * Scale, CardY + 40.f * Scale, BarW * XP / Needed, 3.f * Scale);
+		}
+	}
 	DrawText(Name, HudShadow, CardX + 22.f * Scale + 2.f, CardY + 14.f * Scale + 2.f, Small, 1.25f * Scale);
 	DrawText(Name, LabelColor, CardX + 22.f * Scale, CardY + 14.f * Scale, Small, 1.25f * Scale);
 	const FString Mode = FireModeText(W->GetFireMode()).ToString();

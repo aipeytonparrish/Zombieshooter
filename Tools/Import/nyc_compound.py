@@ -375,6 +375,20 @@ def build(eas):
         c.set_actor_label("ZSAmmoCrate_Compound_%d" % i)
         c.set_folder_path("Compound")
 
+    # Guns on the walls (run cash; buying one you carry buys its ammo) and the mystery box in the warehouse.
+    wall_guns = [("PST_P9", 250, wx(6.5), wy(0) - 15, -90), ("AR_M4", 1000, wx(9) + 15, wy(8), 0),
+                 ("AR_RD704", 1500, wx(20) - 15, wy(5.5), 180), ("AR_M4", 1000, wx(0) + 15, wy(19), 0),
+                 ("AR_RD704", 1500, wx(10), wy(30) - 15, -90)]
+    for i, (item, cost, x, y, yaw) in enumerate(wall_guns):
+        wb = eas.spawn_actor_from_class(unreal.ZSWallBuy, unreal.Vector(x, y, FLOOR + 150), unreal.Rotator(0, 0, yaw))
+        wb.set_actor_label("ZSWallBuy_%s_%d" % (item, i))
+        wb.set_folder_path("Compound/WallBuys")
+        wb.set_editor_property("item_id", item)
+        wb.set_editor_property("cost", cost)
+    box = eas.spawn_actor_from_class(unreal.ZSMysteryBox, unreal.Vector(wx(12.5), wy(19.2), FLOOR + 28), unreal.Rotator(0, 0, 90))
+    box.set_actor_label("ZSMysteryBox")
+    box.set_folder_path("Compound")
+
     zs.log("Compound built: %d barricades, %d lights" % (len(b.barricades), b.lights))
     sx0, sy0, sx1, sy1 = wx(START[0]), wy(START[1]), wx(START[2]), wy(START[3])
     return [unreal.Box(unreal.Vector(sx0 - 60, sy0 - 60, FLOOR - 60), unreal.Vector(sx1 + 60, sy1 + 60, FLOOR + 420)),

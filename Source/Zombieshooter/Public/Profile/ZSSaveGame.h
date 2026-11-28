@@ -50,4 +50,8 @@ public:
 	// ---- Reserved for later milestones ----
 	UPROPERTY(SaveGame) TArray<FName> UnlockedLevels;
 	UPROPERTY(SaveGame) TMap<FName, int32> MissionProgress;
+
+	// Weapon progression (per gun type, kept even when a gun is lost): total XP and the camo picked for it.
+	UPROPERTY(SaveGame) TMap<FName, int32> WeaponXP;
+	UPROPERTY(SaveGame) TMap<FName, FName> WeaponCamo;
 };

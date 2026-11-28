@@ -16,6 +16,8 @@
 #include "Movement/ZSMovementComponent.h"
 #include "Combat/ZSHealthComponent.h"
 #include "Combat/ZSBloodSubsystem.h"
+#include "UI/ZSHUD.h"
+#include "Profile/ZSProfileSubsystem.h"
 #include "Sound/SoundBase.h"
 #include "Combat/ZSAimAssistSubsystem.h"
 #include "Core/ZSGameUserSettings.h"
@@ -122,9 +124,12 @@ void UZSWeaponComponent::SpawnDefaultWeapons()
 
 	// Survival: the profile's deployed loadout (with attachments). Bunker: nothing. Sandbox: the default test weapons.
 	TArray<TPair<TSubclassOf<AZSWeaponBase>, TArray<FName>>> ToSpawn;
+	TArray<FName> ToSpawnIds;
 	for (const TSubclassOf<AZSWeaponBase>& Class : DefaultWeapons)
 	{
 		ToSpawn.Emplace(Class, TArray<FName>());
+		const ZSWeaponCatalog::FEntry* E = ZSWeaponCatalog::All().FindByPredicate([&Class](const ZSWeaponCatalog::FEntry& X) { return X.Class == Class; });
+		ToSpawnIds.Add(E ? E->ItemId : NAME_None);
 	}
 	if (World->GetAuthGameMode<AZSBunkerGameMode>())
 	{
@@ -136,30 +141,22 @@ void UZSWeaponComponent::SpawnDefaultWeapons()
 		if (Deployed.Num() > 0)
 		{
 			ToSpawn.Reset();
+			ToSpawnIds.Reset();
 			for (const FZSInventoryWeapon& W : Deployed)
 			{
 				if (const ZSWeaponCatalog::FEntry* E = ZSWeaponCatalog::Find(W.ItemId))
 				{
 					ToSpawn.Emplace(E->Class, W.Attachments);
+					ToSpawnIds.Add(W.ItemId);
 				}
 			}
 		}
 	}
 
-	for (const TPair<TSubclassOf<AZSWeaponBase>, TArray<FName>>& Entry : ToSpawn)
+	for (int32 i = 0; i < ToSpawn.Num(); ++i)
 	{
-		if (!Entry.Key)
+		if (AZSWeaponBase* Weapon = SpawnWeapon(ToSpawn[i].Key, ToSpawnIds.IsValidIndex(i) ? ToSpawnIds[i] : NAME_None, ToSpawn[i].Value))
 		{
-			continue;
-		}
-		AZSWeaponBase* Weapon = World->SpawnActorDeferred<AZSWeaponBase>(Entry.Key, FTransform::Identity, Char, Char,
-			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-		if (Weapon)
-		{
-			Weapon->Attachments = Entry.Value;
-			Weapon->FinishSpawning(FTransform::Identity);
-			Weapon->AttachToComponent(ViewModelRoot, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
-			Weapon->SetWeaponVisible(false);
 			Weapons.Add(Weapon);
 		}
 	}
@@ -167,6 +164,88 @@ void UZSWeaponComponent::SpawnDefaultWeapons()
 	if (Weapons.Num() > 0)
 	{
 		EquipIndex(0, false);
+	}
+}
+
+AZSWeaponBase* UZSWeaponComponent::SpawnWeapon(TSubclassOf<AZSWeaponBase> Class, FName ItemId, const TArray<FName>& Attachments)
+{
+	AZSPlayerCharacter* Char = GetCharacter();
+	if (!Class || !Char || !ViewModelRoot)
+	{
+		return nullptr;
+	}
+	AZSWeaponBase* Weapon = GetWorld()->SpawnActorDeferred<AZSWeaponBase>(Class, FTransform::Identity, Char, Char, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	if (!Weapon)
+	{
+		return nullptr;
+	}
+	Weapon->Attachments = Attachments;
+	Weapon->ItemId = ItemId;
+	Weapon->FinishSpawning(FTransform::Identity);
+	Weapon->AttachToComponent(ViewModelRoot, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+	Weapon->SetWeaponVisible(false);
+	if (const UZSProfileSubsystem* Profile = UZSProfileSubsystem::Get(this))
+	{
+		Weapon->ApplyCamo(Profile->GetWeaponCamo(ItemId));
+	}
+	return Weapon;
+}
+
+bool UZSWeaponComponent::HasWeapon(FName ItemId) const
+{
+	return Weapons.ContainsByPredicate([ItemId](const AZSWeaponBase* W) { return W && W->ItemId == ItemId; });
+}
+
+void UZSWeaponComponent::RefillWeapon(FName ItemId)
+{
+	for (AZSWeaponBase* W : Weapons)
+	{
+		if (W && W->ItemId == ItemId) { W->RefillAmmo(); }
+	}
+}
+
+void UZSWeaponComponent::GiveWeapon(FName ItemId, const TArray<FName>& Attachments)
+{
+	const ZSWeaponCatalog::FEntry* E = ZSWeaponCatalog::Find(ItemId);
+	if (!E)
+	{
+		return;
+	}
+	if (State == EZSWeaponState::Reloading)
+	{
+		CancelReload();
+	}
+	AZSWeaponBase* New = SpawnWeapon(E->Class, ItemId, Attachments);
+	if (!New)
+	{
+		return;
+	}
+	int32 Slot = Weapons.Num();
+	if (Weapons.Num() >= 2)
+	{
+		// Both hands full: the gun you're holding goes.
+		Slot = CurrentIndex;
+		if (AZSWeaponBase* Old = Weapons[Slot]) { Old->Destroy(); }
+		Weapons[Slot] = New;
+	}
+	else
+	{
+		Weapons.Add(New);
+	}
+	CurrentIndex = INDEX_NONE;
+	EquipIndex(Slot, false);
+}
+
+void UZSWeaponComponent::AwardWeaponKill(AZSWeaponBase* W, bool bHead)
+{
+	UZSProfileSubsystem* Profile = UZSProfileSubsystem::Get(this);
+	if (!W || !Profile || W->ItemId.IsNone() || !GetWorld()->GetAuthGameMode<AZSGameMode_Survival>())
+	{
+		return;
+	}
+	for (const FText& Msg : Profile->AddWeaponXP(W->ItemId, bHead ? 150 : 100))
+	{
+		AZSHUD::Toast(GetCharacter(), Msg);
 	}
 }
 
@@ -347,6 +426,7 @@ void UZSWeaponComponent::DoMeleeHit()
 			LastHitTime = Info.Time;
 			OnWeaponHit.Broadcast(Info);
 			PlayHitConfirm(Info.bKill, false);
+			if (Info.bKill) { AwardWeaponKill(GetCurrentWeapon(), false); }
 		}
 		// Shove what's left of it back.
 		if (ACharacter* Victim = Cast<ACharacter>(Target); Victim && !HC->IsDead())
@@ -944,6 +1024,7 @@ void UZSWeaponComponent::TraceBullet(const FVector& Start, const FVector& Direct
 				OnWeaponHit.Broadcast(Info);
 				Rumble(Info.bKill ? 0.6f : 0.25f, Info.bKill ? 0.15f : 0.06f);
 				PlayHitConfirm(Info.bKill, bHead);
+				if (Info.bKill) { AwardWeaponKill(W, bHead); }
 			}
 
 			// Bullets pass through bodies (zombie piles), losing damage.

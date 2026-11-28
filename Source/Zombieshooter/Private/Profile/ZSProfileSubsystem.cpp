@@ -502,9 +502,10 @@ FText UZSProfileSubsystem::CanFitAttachment(const FGuid& WeaponId, FName Attachm
 	{
 		return NSLOCTEXT("ZS", "AttMax", "This gun already has 5 attachments.");
 	}
-	if (GetUnlockLevel() < A->RequiredLevel)
+	if (GetWeaponLevel(W->ItemId) < A->RequiredLevel)
 	{
-		return FText::Format(NSLOCTEXT("ZS", "NeedLevel", "Requires level {0}."), FText::AsNumber(A->RequiredLevel));
+		return FText::Format(NSLOCTEXT("ZS", "NeedWeaponLevel", "Unlocks at {0} level {1} (level it up by getting kills with it)."),
+			E->DisplayName, FText::AsNumber(A->RequiredLevel));
 	}
 	if (GetCash() < A->Price)
 	{
@@ -768,4 +769,89 @@ void UZSProfileSubsystem::GiveCash(int64 Amount)
 void UZSProfileSubsystem::GiveXP(int32 Amount)
 {
 	if (Profile) { AddXP(FMath::Max(0, Amount)); Save(); }
+}
+
+// ---- Weapon levels ----------------------------------------------------------------------------
+
+int32 UZSProfileSubsystem::GetWeaponLevel(FName ItemId) const
+{
+	int32 XP, Needed;
+	int32 Level = 1;
+	int32 Total = Profile ? Profile->WeaponXP.FindRef(ItemId) : 0;
+	while (Level < MaxWeaponLevel && Total >= WeaponXPToNext(Level))
+	{
+		Total -= WeaponXPToNext(Level);
+		++Level;
+	}
+	(void)XP; (void)Needed;
+	return Level;
+}
+
+void UZSProfileSubsystem::GetWeaponLevelProgress(FName ItemId, int32& OutXP, int32& OutNeeded) const
+{
+	int32 Level = 1;
+	int32 Total = Profile ? Profile->WeaponXP.FindRef(ItemId) : 0;
+	while (Level < MaxWeaponLevel && Total >= WeaponXPToNext(Level))
+	{
+		Total -= WeaponXPToNext(Level);
+		++Level;
+	}
+	OutXP = Level >= MaxWeaponLevel ? 0 : Total;
+	OutNeeded = Level >= MaxWeaponLevel ? 0 : WeaponXPToNext(Level);
+}
+
+TArray<FText> UZSProfileSubsystem::AddWeaponXP(FName ItemId, int32 Amount)
+{
+	TArray<FText> Messages;
+	if (!Profile || ItemId.IsNone() || Amount <= 0)
+	{
+		return Messages;
+	}
+	const int32 Before = GetWeaponLevel(ItemId);
+	Profile->WeaponXP.FindOrAdd(ItemId) += Amount;
+	const int32 After = GetWeaponLevel(ItemId);
+	const FText Name = ZSWeaponCatalog::DisplayName(ItemId);
+	for (int32 L = Before + 1; L <= After; ++L)
+	{
+		FString Unlocks;
+		if (const ZSWeaponCatalog::FEntry* E = ZSWeaponCatalog::Find(ItemId))
+		{
+			for (const FName AttId : E->Attachments)
+			{
+				const ZSWeaponCatalog::FAttachment* A = ZSWeaponCatalog::FindAttachment(AttId);
+				if (A && A->RequiredLevel == L) { Unlocks += (Unlocks.IsEmpty() ? TEXT("") : TEXT(", ")) + A->DisplayName.ToString(); }
+			}
+		}
+		for (const ZSWeaponCatalog::FCamo& C : ZSWeaponCatalog::Camos())
+		{
+			if (C.RequiredLevel == L) { Unlocks += (Unlocks.IsEmpty() ? TEXT("") : TEXT(", ")) + C.DisplayName.ToString() + TEXT(" camo"); }
+		}
+		Messages.Add(Unlocks.IsEmpty()
+			? FText::Format(NSLOCTEXT("ZS", "WeaponLevelUp", "{0} reached level {1}"), Name, FText::AsNumber(L))
+			: FText::Format(NSLOCTEXT("ZS", "WeaponLevelUpUnlock", "{0} reached level {1} - unlocked {2}"), Name, FText::AsNumber(L), FText::FromString(Unlocks)));
+	}
+	return Messages;
+}
+
+FName UZSProfileSubsystem::GetWeaponCamo(FName ItemId) const
+{
+	return Profile ? Profile->WeaponCamo.FindRef(ItemId) : NAME_None;
+}
+
+bool UZSProfileSubsystem::SetWeaponCamo(FName ItemId, FName CamoId, FText& OutMessage)
+{
+	const ZSWeaponCatalog::FCamo* C = ZSWeaponCatalog::FindCamo(CamoId);
+	if (!Profile || !C)
+	{
+		return false;
+	}
+	if (GetWeaponLevel(ItemId) < C->RequiredLevel)
+	{
+		OutMessage = FText::Format(NSLOCTEXT("ZS", "CamoLocked", "{0} unlocks at weapon level {1}."), C->DisplayName, FText::AsNumber(C->RequiredLevel));
+		return false;
+	}
+	Profile->WeaponCamo.Add(ItemId, CamoId);
+	Save();
+	OutMessage = FText::Format(NSLOCTEXT("ZS", "CamoSet", "{0} camo applied."), C->DisplayName);
+	return true;
 }

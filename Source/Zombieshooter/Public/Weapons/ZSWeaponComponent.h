@@ -38,6 +38,12 @@ public:
 	/** Melee bash (right stick click / V): a short sweep in front, heavy damage and a shove. */
 	void RequestMelee();
 
+	/** In-run gun from a wall buy / the mystery box: replaces the held gun when both slots are full. */
+	void GiveWeapon(FName ItemId, const TArray<FName>& Attachments);
+	bool HasWeapon(FName ItemId) const;
+	/** Full reserve for that gun (wall-buy ammo). */
+	void RefillWeapon(FName ItemId);
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ZS|Melee") float MeleeDamage = 150.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ZS|Melee") float MeleeRange = 175.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ZS|Melee") float MeleeDuration = 0.55f;
@@ -170,6 +176,8 @@ private:
 	void Rumble(float Intensity, float Duration) const;
 	void PlayHitConfirm(bool bKill, bool bHead);
 	void DoMeleeHit();
+	AZSWeaponBase* SpawnWeapon(TSubclassOf<AZSWeaponBase> Class, FName ItemId, const TArray<FName>& Attachments);
+	void AwardWeaponKill(AZSWeaponBase* W, bool bHead);
 	bool bMeleeHitDone = false;
 	float MeleeAlpha = 0.f;
 	bool bMeleeAnimated = false;

@@ -127,6 +127,14 @@ public:
 	UFUNCTION(Exec)
 	void ZSUseDoors();
 
+	/** Test: buy the first wall gun with this id (needs run cash, see ZSRunCash). */
+	UFUNCTION(Exec)
+	void ZSBuyWall(FName ItemId);
+
+	/** Test: pay the mystery box, then take what it offers when the spin ends. */
+	UFUNCTION(Exec)
+	void ZSUseBox();
+
 	UFUNCTION(Exec)
 	void ZSGiveXP(int32 Amount);
 

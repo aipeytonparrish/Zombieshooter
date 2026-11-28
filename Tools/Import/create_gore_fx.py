@@ -219,6 +219,66 @@ def build_flesh():
     return mat
 
 
+def build_camo():
+    """Gun camo overlay (UMeshComponent overlay material): a 3-colour blotch pattern in the gun's own space, so it stays
+    put as the gun moves. Params: ColorA/B/C, Scale, Metal (gold), Emissive (glow)."""
+    mat = fresh_material("M_ZS_Camo")
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    mat.set_editor_property("translucency_lighting_mode", unreal.TranslucencyLightingMode.TLM_SURFACE)
+    mat.set_editor_property("used_with_skeletal_mesh", True)
+    pos = expr(mat, unreal.MaterialExpressionLocalPosition, -1300, 0)
+    sc = scalar(mat, "Scale", 1.0, -1300, 150)
+    p = expr(mat, unreal.MaterialExpressionMultiply, -1100, 50)
+    link(pos, p, "A")
+    link(sc, p, "B")
+    n1 = expr(mat, unreal.MaterialExpressionNoise, -900, 0, scale=0.06, levels=3, output_min=0.0, output_max=1.0)
+    link(p, n1, "Position")
+    off = expr(mat, unreal.MaterialExpressionAdd, -1100, 250)
+    link(p, off, "A")
+    k = expr(mat, unreal.MaterialExpressionConstant3Vector, -1300, 300, constant=unreal.LinearColor(37.0, 11.0, 23.0, 1))
+    link(k, off, "B")
+    n2 = expr(mat, unreal.MaterialExpressionNoise, -900, 250, scale=0.09, levels=2, output_min=0.0, output_max=1.0)
+    link(off, n2, "Position")
+
+    def mask(n, th, x, y):
+        s = expr(mat, unreal.MaterialExpressionSubtract, x, y, const_b=th)
+        link(n, s, "A")
+        m = expr(mat, unreal.MaterialExpressionMultiply, x + 150, y, const_b=14.0)
+        link(s, m, "A")
+        sat = expr(mat, unreal.MaterialExpressionSaturate, x + 300, y)
+        link(m, sat)
+        return sat
+    m1 = mask(n1, 0.46, -700, 0)
+    m2 = mask(n2, 0.56, -700, 250)
+    ca = vector(mat, "ColorA", unreal.LinearColor(0.02, 0.025, 0.012, 1), -500, -400)
+    cb = vector(mat, "ColorB", unreal.LinearColor(0.07, 0.09, 0.03, 1), -500, -250)
+    cc = vector(mat, "ColorC", unreal.LinearColor(0.16, 0.13, 0.07, 1), -500, -100)
+    l1 = expr(mat, unreal.MaterialExpressionLinearInterpolate, -250, -300)
+    link(ca, l1, "A")
+    link(cb, l1, "B")
+    link(m1, l1, "Alpha")
+    l2 = expr(mat, unreal.MaterialExpressionLinearInterpolate, -100, -200)
+    link(l1, l2, "A")
+    link(cc, l2, "B")
+    link(m2, l2, "Alpha")
+    mel.connect_material_property(l2, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    metal = scalar(mat, "Metal", 0.0, -250, 100)
+    mel.connect_material_property(metal, "", unreal.MaterialProperty.MP_METALLIC)
+    rough = expr(mat, unreal.MaterialExpressionLinearInterpolate, -100, 150, const_a=0.6, const_b=0.15)
+    link(metal, rough, "Alpha")
+    mel.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    em = scalar(mat, "Emissive", 0.0, -250, 300)
+    emc = expr(mat, unreal.MaterialExpressionMultiply, -100, 300)
+    link(l2, emc, "A")
+    link(em, emc, "B")
+    mel.connect_material_property(emc, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    op = expr(mat, unreal.MaterialExpressionConstant, -100, 450, r=0.96)
+    mel.connect_material_property(op, "", unreal.MaterialProperty.MP_OPACITY)
+    mel.recompile_material(mat)
+    zs.eal.save_loaded_asset(mat)
+    return mat
+
+
 def build_paint():
     mat = fresh_material("M_ZS_Paint")
     color = vector(mat, "Color", unreal.LinearColor(0.5, 0.5, 0.5, 1), -500, -100)
@@ -251,4 +311,5 @@ fresh_instance("MI_ZS_FXDrop", sprite, textures={"Tex": tex["T_ZS_Drop"]})
 build_spark()
 build_flesh()
 build_paint()
+build_camo()
 zs.log("gore fx: textures + materials created")

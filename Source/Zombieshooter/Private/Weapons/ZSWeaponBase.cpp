@@ -187,6 +187,33 @@ void AZSWeaponBase::BuildVisuals()
 	MuzzleLight->SetRelativeLocation(Stats.MuzzlePoint + FVector(25.f, 0.f, 0.f));
 }
 
+void AZSWeaponBase::ApplyCamo(FName CamoId)
+{
+	const ZSWeaponCatalog::FCamo* C = ZSWeaponCatalog::FindCamo(CamoId);
+	UMaterialInstanceDynamic* MID = nullptr;
+	if (C && C->Id != TEXT("NONE"))
+	{
+		if (UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ZS/Materials/M_ZS_Camo.M_ZS_Camo"), nullptr, LOAD_NoWarn | LOAD_Quiet))
+		{
+			MID = UMaterialInstanceDynamic::Create(Base, this);
+			MID->SetVectorParameterValue(TEXT("ColorA"), C->A);
+			MID->SetVectorParameterValue(TEXT("ColorB"), C->B);
+			MID->SetVectorParameterValue(TEXT("ColorC"), C->C);
+			MID->SetScalarParameterValue(TEXT("Scale"), C->Scale);
+			MID->SetScalarParameterValue(TEXT("Metal"), C->Metal);
+			MID->SetScalarParameterValue(TEXT("Emissive"), C->Emissive);
+		}
+	}
+	if (WeaponMesh && WeaponMesh->GetSkinnedAsset())
+	{
+		WeaponMesh->SetOverlayMaterial(MID);
+	}
+	for (UStaticMeshComponent* P : PartComponents)
+	{
+		if (P) { P->SetOverlayMaterial(MID); }
+	}
+}
+
 void AZSWeaponBase::SetWeaponVisible(bool bVisible)
 {
 	SetActorHiddenInGame(!bVisible);

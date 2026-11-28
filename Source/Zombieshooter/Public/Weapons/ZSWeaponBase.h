@@ -66,6 +66,13 @@ public:
 	/** True when the animated rig loaded; false = code-posed arms + Stats.Parts. */
 	bool IsAnimated() const { return bAnimated; }
 	USkeletalMeshComponent* GetDriverMesh() const { return DriverMesh; }
+
+	/** Catalog id (PST_P9, AR_M4...): what levels up when this gun gets kills. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "ZS|Weapon")
+	FName ItemId;
+
+	/** Pattern overlay from ZSWeaponCatalog::Camos() on the gun's meshes (not the arms); NONE / None clears it. */
+	void ApplyCamo(FName CamoId);
 	USkeletalMeshComponent* GetWeaponMesh() const { return WeaponMesh; }
 	UZSFPAnimInstance* GetArmsAnim() const;
 	UZSFPAnimInstance* GetWeaponAnim() const;

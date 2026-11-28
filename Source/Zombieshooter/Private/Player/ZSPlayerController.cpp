@@ -15,6 +15,8 @@
 #include "Zombies/ZSZombieBase.h"
 #include "Player/ZSCameraComponent.h"
 #include "Movement/ZSMovementComponent.h"
+#include "World/ZSWallBuy.h"
+#include "World/ZSMysteryBox.h"
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/DamageType.h"
@@ -816,6 +818,43 @@ void AZSPlayerController::ZSRunCash(int32 Amount)
 	{
 		GS->RunCash += Amount;
 		UE_LOG(LogZS, Warning, TEXT("Run cash: %d"), GS->RunCash);
+	}
+}
+
+void AZSPlayerController::ZSBuyWall(FName ItemId)
+{
+	AZSPlayerCharacter* Char = Cast<AZSPlayerCharacter>(GetPawn());
+	for (TActorIterator<AZSWallBuy> It(GetWorld()); It; ++It)
+	{
+		if (It->ItemId == ItemId)
+		{
+			UE_LOG(LogZS, Warning, TEXT("WallBuy %s: %s"), *It->GetName(), *It->GetInteractPrompt().ToString());
+			It->Interact(Char);
+			return;
+		}
+	}
+	UE_LOG(LogZS, Warning, TEXT("No wall buy for %s"), *ItemId.ToString());
+}
+
+void AZSPlayerController::ZSUseBox()
+{
+	AZSPlayerCharacter* Char = Cast<AZSPlayerCharacter>(GetPawn());
+	for (TActorIterator<AZSMysteryBox> It(GetWorld()); It; ++It)
+	{
+		AZSMysteryBox* Box = *It;
+		Box->Interact(Char);
+		UE_LOG(LogZS, Warning, TEXT("Box: rolling"));
+		FTimerHandle H;
+		TWeakObjectPtr<AZSMysteryBox> WeakBox = Box;
+		GetWorldTimerManager().SetTimer(H, FTimerDelegate::CreateWeakLambda(this, [this, WeakBox]()
+		{
+			if (WeakBox.IsValid())
+			{
+				UE_LOG(LogZS, Warning, TEXT("Box: %s"), *WeakBox->GetInteractPrompt().ToString());
+				WeakBox->Interact(Cast<AZSPlayerCharacter>(GetPawn()));
+			}
+		}), 4.6f, false);
+		return;
 	}
 }
 

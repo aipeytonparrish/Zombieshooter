@@ -454,6 +454,30 @@ void AZSPlayerController::StartAutoShotIfRequested()
 		}), 0.01f, true);
 	}
 
+	// -ZSAutoPlay: soak test. Stats every 10 s (round, alive, kills, cash, fps), ammo topped up, doors bought as cash
+	// allows. Combine with -ZSAutoAim -ZSAutoBursts -ZSAutoGod and a long -ZSAutoShot.
+	if (FParse::Param(Cmd, TEXT("ZSAutoPlay")))
+	{
+		FTimerHandle StatsTimer;
+		GetWorldTimerManager().SetTimer(StatsTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			const AZSGameState_Survival* GS = GetWorld()->GetGameState<AZSGameState_Survival>();
+			const AZSGameMode_Survival* GM = GetWorld()->GetAuthGameMode<AZSGameMode_Survival>();
+			const UZSRoundManagerComponent* RM = GM ? GM->GetRoundManager() : nullptr;
+			const float Fps = 1.f / FMath::Max(0.0001f, GetWorld()->GetDeltaSeconds());
+			const APawn* P = GetPawn();
+			UE_LOG(LogZS, Warning, TEXT("AutoPlay t=%.0f round=%d left=%d alive=%d kills=%d cash=%d fps=%.0f at %s"), GetWorld()->GetTimeSeconds(),
+				GS ? GS->Round : -1, GS ? GS->ZombiesRemaining : -1, RM ? RM->GetAliveCount() : -1, GS ? GS->Kills : -1, GS ? GS->RunCash : -1, Fps,
+				P ? *P->GetActorLocation().ToCompactString() : TEXT("-"));
+		}), 10.f, true);
+		FTimerHandle UpkeepTimer;
+		GetWorldTimerManager().SetTimer(UpkeepTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			ZSGiveAmmo();
+			ZSUseDoors();
+		}), 20.f, true);
+	}
+
 	// -ZSAutoAim: keep the view on the nearest live zombie's chest (repeatable damage tests).
 	if (FParse::Param(Cmd, TEXT("ZSAutoAim")))
 	{

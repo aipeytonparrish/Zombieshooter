@@ -206,7 +206,7 @@ void AZSStation::ApplyVisuals()
 		PropA->SetStaticMesh(Mesh(TEXT("/Engine/BasicShapes/Plane.Plane")));
 		PropA->SetRelativeLocationAndRotation(FVector(40.f, 0.f, 110.f), FRotator(90.f, 0.f, 0.f));
 		PropA->SetRelativeScale3D(FVector(1.f, 1.6f, 1.f));
-		PropA->SetMaterial(0, KitOrPaint(this, TEXT(""), FLinearColor(0.2f, 0.13f, 0.07f)));   // cork board
+		PropA->SetMaterial(0, KitOrPaint(this, TEXT("/Game/MS_NewYorkCityKitbash_Assets/Materials/M_Wood01.M_Wood01"), FLinearColor(0.2f, 0.13f, 0.07f)));   // board (was white: empty kit path)
 		break;
 	case EZSStationType::MapTable:
 		PropA->SetStaticMesh(Mesh(TEXT("/Engine/BasicShapes/Plane.Plane")));

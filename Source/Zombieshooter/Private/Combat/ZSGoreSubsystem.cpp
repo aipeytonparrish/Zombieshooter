@@ -5,6 +5,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/PoseableMeshComponent.h"
+#include "GameFramework/Pawn.h"
 #include "Engine/SkinnedAssetCommon.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -29,6 +30,22 @@ TStatId UZSGoreSubsystem::GetStatId() const
 	RETURN_QUICK_DECLARE_CYCLE_STAT(UZSGoreSubsystem, STATGROUP_Tickables);
 }
 
+void UZSGoreSubsystem::DestroyGib(FGib& G)
+{
+	// Child first: never leave a part attached to a destroyed carrier.
+	if (UPoseableMeshComponent* P = G.Part.Get())
+	{
+		P->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
+		P->DestroyComponent();
+	}
+	if (UStaticMeshComponent* C = G.Comp.Get())
+	{
+		C->DestroyComponent();
+	}
+	G.Part = nullptr;
+	G.Comp = nullptr;
+}
+
 void UZSGoreSubsystem::SpawnGibs(const FVector& Location, const FVector& Direction, int32 Count, float Scale)
 {
 	if (!DismemberEnabled())
@@ -44,10 +61,10 @@ void UZSGoreSubsystem::SpawnGibs(const FVector& Location, const FVector& Directi
 		Host->SetRootComponent(NewObject<USceneComponent>(Host, TEXT("Root")));
 		Host->GetRootComponent()->RegisterComponent();
 	}
-	static UStaticMesh* Sphere = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
-	static UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+	UStaticMesh* Sphere = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
 	// Our wet flesh material (create_gore_fx.py); the engine's plain shape material if it's missing.
-	static UMaterialInterface* Flesh = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ZS/Materials/M_ZS_Flesh.M_ZS_Flesh"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	UMaterialInterface* Flesh = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ZS/Materials/M_ZS_Flesh.M_ZS_Flesh"), nullptr, LOAD_NoWarn | LOAD_Quiet);
 	UMaterialInterface* Shape = Flesh ? nullptr : LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
 
 	for (int32 i = 0; i < Count; ++i)
@@ -55,7 +72,7 @@ void UZSGoreSubsystem::SpawnGibs(const FVector& Location, const FVector& Directi
 		// Recycle the oldest past the cap.
 		while (Gibs.Num() >= MaxGibs)
 		{
-			if (UStaticMeshComponent* Old = Gibs[0].Comp.Get()) { Old->DestroyComponent(); }
+			DestroyGib(Gibs[0]);   // the severed part riding on it too (an orphaned part crashed the renderer)
 			Gibs.RemoveAt(0);
 		}
 		UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(Host, NAME_None, RF_Transient);
@@ -114,8 +131,7 @@ void UZSGoreSubsystem::SpawnSeveredPart(USkeletalMeshComponent* Source, FName Bo
 	}
 	while (Gibs.Num() >= MaxGibs)
 	{
-		if (UStaticMeshComponent* Old = Gibs[0].Comp.Get()) { Old->DestroyComponent(); }
-		if (UPoseableMeshComponent* OldPart = Gibs[0].Part.Get()) { OldPart->DestroyComponent(); }
+		DestroyGib(Gibs[0]);
 		Gibs.RemoveAt(0);
 	}
 
@@ -141,47 +157,48 @@ void UZSGoreSubsystem::SpawnSeveredPart(USkeletalMeshComponent* Source, FName Bo
 	Centre = Count > 0 ? Centre / Count : CompWorld.TransformPosition(CS[CutIndex].GetLocation());
 	const bool bHead = Bone == TEXT("head");
 
-	// Physics carrier: an invisible ball the part rides on.
-	static UStaticMesh* Sphere = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
-	UStaticMeshComponent* Carrier = NewObject<UStaticMeshComponent>(Host, NAME_None, RF_Transient);
-	Carrier->SetStaticMesh(Sphere);
-	const float R = bHead ? 0.2f : 0.16f;
-	Carrier->SetWorldScale3D(FVector(R));
-	Carrier->SetWorldLocation(Centre);
-	Carrier->SetVisibility(false);
-	Carrier->SetCollisionProfileName(TEXT("PhysicsActor"));
-	Carrier->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
-	Carrier->SetCastShadow(false);
-	Carrier->SetMobility(EComponentMobility::Movable);
-	Carrier->RegisterComponent();
-
 	// The part: the zombie's own mesh, posed like it was, every bone outside the part shrunk to nothing.
+	// Pose it fully before it's registered (setting bones on a live poseable mesh marks it for render updates every
+	// call; doing that in the same frame it was created tripped an engine render-state assertion).
 	UPoseableMeshComponent* Part = NewObject<UPoseableMeshComponent>(Host, NAME_None, RF_Transient);
 	Part->SetSkinnedAssetAndUpdate(Source->GetSkinnedAsset());
 	for (int32 m = 0; m < Source->GetNumMaterials(); ++m) { Part->SetMaterial(m, Source->GetMaterial(m)); }
 	Part->SetOverlayMaterial(Source->GetOverlayMaterial());
 	Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Part->SetWorldTransform(CompWorld);
-	Part->RegisterComponent();
 	const float Gone = 0.001f;
-	for (int32 i = 0; i < NumBones && i < CS.Num(); ++i)
+	if (Part->BoneSpaceTransforms.Num() == NumBones)
 	{
-		FTransform T = CS[i];
-		T.SetScale3D(InSubtree(i) ? CS[i].GetScale3D() : FVector(Gone));
-		Part->SetBoneTransformByName(Ref.GetBoneName(i), T, EBoneSpaces::ComponentSpace);
+		// Local (parent-relative) transforms from the source's component-space pose, with everything outside the
+		// part shrunk to nothing.
+		TArray<FTransform> Shaped;
+		Shaped.SetNum(NumBones);
+		for (int32 i = 0; i < NumBones && i < CS.Num(); ++i)
+		{
+			Shaped[i] = CS[i];
+			Shaped[i].SetScale3D(InSubtree(i) ? CS[i].GetScale3D() : FVector(Gone));
+			const int32 Parent = Ref.GetParentIndex(i);
+			Part->BoneSpaceTransforms[i] = Parent == INDEX_NONE ? Shaped[i] : Shaped[i].GetRelativeTransform(Shaped[Parent]);
+		}
 	}
-	Part->AttachToComponent(Carrier, FAttachmentTransformRules::KeepWorldTransform);
+	Part->RegisterComponent();
 
-	Carrier->SetSimulatePhysics(true);
-	Carrier->SetMassOverrideInKg(NAME_None, bHead ? 5.f : 3.f, true);
-	const FVector V = (Direction.GetSafeNormal() * 0.8f + FMath::VRand() * 0.35f + FVector(0.f, 0.f, 0.6f)).GetSafeNormal() * FMath::FRandRange(300.f, 560.f);
-	Carrier->SetPhysicsLinearVelocity(V);
-	Carrier->SetPhysicsAngularVelocityInDegrees(FMath::VRand() * 600.f);
-	FGib G;
-	G.Comp = Carrier;
-	G.Life = 25.f;
-	G.Part = Part;
-	Gibs.Add(G);
+	// Flies on a scripted arc (no physics: a physics carrier with the part attached crashed the renderer).
+	FSevered S;
+	S.Part = Part;
+	S.Pivot = Centre;
+	S.Offset = CompWorld.GetRelativeTransform(FTransform(Centre));
+	S.Rotation = FQuat::Identity;
+	S.Velocity = (Direction.GetSafeNormal() * 0.8f + FMath::VRand() * 0.35f + FVector(0.f, 0.f, 0.6f)).GetSafeNormal() * FMath::FRandRange(300.f, 560.f);
+	S.Spin = FMath::VRand() * FMath::FRandRange(300.f, 700.f);
+	S.Radius = bHead ? 12.f : 8.f;
+	S.Life = 25.f;
+	while (Severed.Num() >= 24)
+	{
+		if (UPoseableMeshComponent* Old = Severed[0].Part.Get()) { Old->DestroyComponent(); }
+		Severed.RemoveAt(0);
+	}
+	Severed.Add(S);
 }
 
 void UZSGoreSubsystem::AddStump(USkeletalMeshComponent* Mesh, FName Bone, float Duration)
@@ -239,14 +256,55 @@ void UZSGoreSubsystem::Tick(float DeltaTime)
 			Blood->SpawnDrip(T.GetLocation(), (Out + FVector(0, 0, 0.35f)).GetSafeNormal() * 260.f * Pulse, FMath::RoundToInt(3.f + 4.f * Pulse));
 		}
 	}
+	for (int32 i = Severed.Num() - 1; i >= 0; --i)
+	{
+		FSevered& S = Severed[i];
+		UPoseableMeshComponent* P = S.Part.Get();
+		S.Life -= DeltaTime;
+		if (!P || S.Life <= 0.f)
+		{
+			if (P) { P->DestroyComponent(); }
+			Severed.RemoveAtSwap(i);
+			continue;
+		}
+		if (S.bResting)
+		{
+			continue;
+		}
+		S.Velocity.Z -= 980.f * DeltaTime;
+		const FVector From = S.Pivot;
+		FVector To = From + S.Velocity * DeltaTime;
+		FHitResult Hit;
+		FCollisionQueryParams Q(SCENE_QUERY_STAT(ZSSevered), false);
+		if (GetWorld()->SweepSingleByChannel(Hit, From, To, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(S.Radius), Q)
+			&& !(Hit.GetActor() && Hit.GetActor()->IsA<APawn>()))
+		{
+			To = Hit.Location;
+			S.Velocity = FMath::GetReflectionVector(S.Velocity, Hit.ImpactNormal) * 0.3f;
+			S.Spin *= 0.5f;
+			if (Blood && S.Velocity.Size() > 60.f) { Blood->SpawnSplat(Hit.ImpactPoint, Hit.ImpactNormal, FMath::FRandRange(16.f, 28.f)); }
+			if (S.Velocity.Size() < 60.f && Hit.ImpactNormal.Z > 0.6f)
+			{
+				S.bResting = true;
+				if (Blood) { Blood->SpawnSplat(Hit.ImpactPoint, Hit.ImpactNormal, FMath::FRandRange(22.f, 36.f)); }
+			}
+		}
+		else if (Blood)
+		{
+			S.DripTimer -= DeltaTime;
+			if (S.DripTimer <= 0.f) { S.DripTimer = 0.05f; Blood->SpawnDrip(To, S.Velocity * 0.2f, 1); }
+		}
+		S.Pivot = To;
+		S.Rotation = FQuat(S.Spin.GetSafeNormal(), FMath::DegreesToRadians(S.Spin.Size() * DeltaTime)) * S.Rotation;
+		P->SetWorldTransform(S.Offset * FTransform(S.Rotation, S.Pivot));
+	}
 	for (int32 i = Gibs.Num() - 1; i >= 0; --i)
 	{
 		Gibs[i].Life -= DeltaTime;
 		UStaticMeshComponent* C = Gibs[i].Comp.Get();
 		if (!C || Gibs[i].Life <= 0.f)
 		{
-			if (C) { C->DestroyComponent(); }
-			if (UPoseableMeshComponent* P = Gibs[i].Part.Get()) { P->DestroyComponent(); }
+			DestroyGib(Gibs[i]);
 			Gibs.RemoveAtSwap(i);
 			continue;
 		}

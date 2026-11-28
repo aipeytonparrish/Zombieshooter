@@ -108,6 +108,56 @@ class Dresser:
         d.set_folder_path(folder)
 
 
+AMMO = "/Game/ZS_Imported/Props/AmmoBoxes/%s"
+
+
+def dress_compound(d, wx, wy):
+    """Furnish the compound's rooms with what the packs have: crate stacks, generators (big AC units), electrical
+    boxes, trash, benches, dead plants. Kept off the doorways / windows / walk lines."""
+    z = -100
+    f = "Dressing/Compound"
+
+    def crate_stack(x, y, yaw, n=3):
+        names = ["SM_Ammobox_762_NATO_Closed", "SM_Ammobox_556_NATO_Closed", "SM_Ammobox_12_Gauge_Closed", "SM_Ammobox_40mm_Grenade_Closed"]
+        h = z
+        for i in range(n):
+            m = unreal.load_asset(AMMO % names[(i + int(x)) % len(names)])
+            if not m:
+                return
+            b = m.get_bounding_box()
+            s = 2.2
+            a = d.eas.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(x, y, h - b.min.z * s), unreal.Rotator(0, 0, yaw + i * 9))
+            a.static_mesh_component.set_static_mesh(m)
+            a.set_actor_scale3d(unreal.Vector(s, s, s))
+            a.set_folder_path(f)
+            h += (b.max.z - b.min.z) * s
+
+    # Offices: benches as waiting-room seats, trash, a dead plant.
+    d.prop("SM_Bench02", wx(2), wy(1.2), 0, maxsize=260, z=z, folder=f)
+    d.prop("SM_Plant02", wx(0.6), wy(6.4), 0, maxsize=160, z=z, folder=f)
+    d.prop("SM_Trash06", wx(6.5), wy(5.8), 30, maxsize=200, z=z, folder=f)
+    # Storage: crate stacks along the walls.
+    for x, y in ((13, 6.3), (15, 6.3), (19.2, 1.6), (19.2, 5.0), (12.2, 1.0)):
+        crate_stack(wx(x), wy(y), (x * 37) % 90, 2 + int(x) % 3)
+    # Locker room: electrical boxes as lockers along the west wall, trash.
+    for y in (7.8, 8.6, 10.4, 11.2):
+        d.prop("SM_ElectricityBox", wx(0.45), wy(y), 90, maxsize=180, z=z, folder=f)
+    d.prop("SM_Trash11", wx(6), wy(12.6), 0, maxsize=220, z=z, folder=f)
+    # Generator room: big rooftop AC units as generators, cable clutter.
+    for x, y, n in ((14, 13.2, "SM_AirConditioner09"), (18.5, 8.0, "SM_AirConditioner11"), (13.0, 8.0, "SM_AirConditioner07")):
+        d.prop(n, wx(x), wy(y), 0, maxsize=280, z=z, folder=f)
+    # Warehouse: crate stacks, generators, trash piles, a water tank in a corner.
+    for x, y in ((2, 15.2), (3.2, 15.2), (17, 23.2), (18.2, 23.2), (2, 22.8), (14.5, 15.3)):
+        crate_stack(wx(x), wy(y), (x * 53) % 90, 3)
+    d.prop("SM_WaterTank02", wx(18.4), wy(15.8), 0, maxsize=380, z=z, folder=f)
+    d.prop("SM_AirConditioner12", wx(6.5), wy(23.2), 180, maxsize=300, z=z, folder=f)
+    for x, y in ((8, 17), (12, 21.5), (4, 19.5), (16, 18.5)):
+        d.prop("SM_Trash%02d" % (3 + int(x * 3) % 15), wx(x), wy(y), x * 20, maxsize=240, z=z, folder=f)
+    # Start room: a crate stack and trash.
+    crate_stack(wx(12.4), wy(-1.0), 15, 2)
+    d.prop("SM_Trash09", wx(6.0), wy(-6.8), 40, maxsize=200, z=z, folder=f)
+
+
 def dress(eas, compound_rooms):
     """compound_rooms: [(xmin, ymin, xmax, ymax), ...] floor rectangles (z -100) for blood inside the compound."""
     d = Dresser(eas)

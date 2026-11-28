@@ -625,3 +625,40 @@ used). It's the game's default map and where runs return to.
   maps hung the GPU on load.
 - Test helpers: `-ZSAutoAim` keeps the view on the nearest visible zombie (with `-ZSAutoBursts` for damage tests);
   `ZSZombieInfo` now prints health and hit-box drift.
+
+## Guns: levels, camos, wall buys, the mystery box
+
+- **Gun levels:** every gun type starts at level 1 (max 30). Kills with it level it up (100 XP, 150 for a headshot)
+  whether it's your own gun, a wall buy or a box gun, and the level is kept even if you lose the gun. Levels unlock
+  that gun's attachments (Reflex 2, Brake 4, Grip 6, Suppressor 8, Extended Mag 10, Light Stock 12) and camos
+  (Woodland 3, Desert 6, Urban 9, Arctic 12, Tiger 15, Crimson 18, Blood-Soaked 21, Gold 25, Dark Matter 30).
+- **Customising** happens at home only: Armory → a gun → attachments / CAMO, or Armory → WEAPON LEVELS & CAMOS for
+  every gun type. In a run you can't customise, but you can buy guns.
+- **Wall buys** (`AZSWallBuy`): P9 in the start room ($250), M4 in the hallway and the warehouse ($1000), RD-704 in
+  storage and the courtyard ($1500). Buying a gun you carry buys its ammo (half price). With two guns, the one in your
+  hands is swapped out.
+- **Mystery box** (`AZSMysteryBox`, warehouse, $950): spins, then offers a random gun, sometimes with up to three
+  random attachments; take it within ~8 s. The blue light beam shows where it is.
+- The HUD's weapon card shows the gun's level and XP bar; a level-up toasts what it unlocked.
+- Only three guns exist so far (P9, M4, RD-704) — more gun packs make the walls and the box far more interesting.
+
+## Combat fixes (this pass)
+
+- Body shots now always register: the physics-driven hit reaction could pull the zombie's hit boxes off its body; the
+  jolt is now purely visual (the mesh rocks about the hips on a spring).
+- Round 1 is easier: walkers 70 hp (3 pistol body shots), runners 50; +16 % health per round after that.
+- Slides: a tap of crouch while sprinting is a full slide even with hold-to-crouch; letting go only stands you up when
+  the slide ends; jump or crouch again to cancel.
+- Gore: severed heads and limbs are the zombie's real body parts flying off; zombies soak with blood as they're shot.
+- Smoke columns, embers and ash (`AZSSmokeColumn`, the Rooftop's ash is an `AZSRain` set to slow grey flakes); burning
+  towers on the Rooftop skyline.
+- Test helpers: `-ZSAutoPlay` (soak test: stats every 10 s, ammo, doors), `-ZSAutoAim[Bone=]`, `-ZSAutoSlide[=hold]`,
+  `zs.LogHits 1`, `ZSBuyWall <id>`, `ZSUseBox`.
+
+### Stability notes (soak tests)
+
+- Long automated runs (`-ZSAutoPlay`, 9-10 minutes, rounds 1-5) found and fixed: a crash when the gore cap recycled a
+  severed body part's carrier (the part was left attached to a destroyed component), zombie spawns failing when a
+  spawn point overlapped geometry (they now nudge free), and a first-frame GPU hang in Nanite shadow culling.
+- `r.Nanite.Tessellation=0` (Config/DefaultEngine.ini): the hang's last pass was Nanite tessellation, which nothing of
+  ours uses. Keep local lights shadowless in the big maps for the same reason.

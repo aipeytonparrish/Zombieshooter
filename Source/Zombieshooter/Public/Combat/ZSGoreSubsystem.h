@@ -59,6 +59,23 @@ private:
 	};
 	TArray<FGib> Gibs;
 
+	/** A severed body part on a scripted arc (gravity, bounces, comes to rest). */
+	struct FSevered
+	{
+		TWeakObjectPtr<class UPoseableMeshComponent> Part;
+		FVector Pivot = FVector::ZeroVector;     // centre of the part (world)
+		FTransform Offset;                       // mesh transform relative to the pivot at spawn
+		FQuat Rotation = FQuat::Identity;
+		FVector Velocity = FVector::ZeroVector;
+		FVector Spin = FVector::ZeroVector;      // deg/s around its axis
+		float Radius = 10.f;
+		float Life = 20.f;
+		float DripTimer = 0.f;
+		bool bResting = false;
+	};
+	TArray<FSevered> Severed;
+	void DestroyGib(FGib& G);
+
 	UPROPERTY(Transient)
 	TObjectPtr<AActor> Host;
 };

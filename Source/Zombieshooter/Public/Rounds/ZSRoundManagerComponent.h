@@ -140,6 +140,9 @@ private:
 	bool bBossRound = false;
 	void SpawnBoss();
 	int32 Alive = 0;
+public:
+	int32 GetAliveCount() const { return Alive; }
+private:
 	float SpawnTimer = 0.f;
 	float PhaseTimer = 0.f;
 	bool bRunOver = false;

@@ -151,3 +151,16 @@ flipbook spurts and wound decals would look even better.
 ### Later milestones
 City block kit (M14), character creator parts on the Mannequin skeleton (M9), all special
 zombies + gib meshes (M11), boss (M12), music + UI art (M14). Detailed specs get added here as each milestone starts.
+
+## Wanted next (highest impact first)
+
+1. **More guns with first-person animations** — shotgun, SMG, LMG, sniper, a few pistols (any FPS weapon pack with
+   arms animations, ideally on the UE5 mannequin). Only three guns exist, which makes the wall buys and the mystery
+   box thin.
+2. **Realistic blood & gore VFX** — Niagara blood spurts / sprays / mist with flipbooks, wound decals, and if
+   possible a dismemberment kit with cut caps (stump meshes). Ours is procedural.
+3. **High-detail city buildings** — the Rooftop skyline and New York backdrop use the Megascans kitbash towers; a
+   higher-detail city pack (e.g. Epic's free City Sample buildings) would make the skyline far richer.
+4. **Smoke / fire / ash VFX pack** — volumetric smoke columns and burning-building fires; ours are sprite puffs.
+5. **Camp props** for the Rooftop (tents, crates, cots, radio, cooking gear) and **sounds** (fire crackle, wind,
+   footsteps, slide, board break).

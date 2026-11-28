@@ -246,6 +246,7 @@ else:
 rooms = [(nyc_compound.wx(a), nyc_compound.wy(b), nyc_compound.wx(c), nyc_compound.wy(d))
          for name, (a, b, c, d), *_ in nyc_compound.ROOMS if name != "Courtyard"]
 nyc_dressing.dress(eas, rooms)
+nyc_dressing.dress_compound(nyc_dressing.Dresser(eas), nyc_compound.wx, nyc_compound.wy)
 
 les.save_current_level()
 zs.log("Saved " + MAP)

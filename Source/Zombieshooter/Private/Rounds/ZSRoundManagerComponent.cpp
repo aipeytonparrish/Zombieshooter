@@ -413,7 +413,7 @@ void UZSRoundManagerComponent::SpawnOne()
 
 	const FTransform T(Rot, Loc);
 	AZSZombieBase* Z = GetWorld()->SpawnActorDeferred<AZSZombieBase>(AZSZombieBase::StaticClass(), T, nullptr, nullptr,
-		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding);
+		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn);   // a blocked spawn used to just fail
 	if (!Z)
 	{
 		UE_LOG(LogZS, Warning, TEXT("SpawnOne: spawn blocked at %s"), *Loc.ToCompactString());

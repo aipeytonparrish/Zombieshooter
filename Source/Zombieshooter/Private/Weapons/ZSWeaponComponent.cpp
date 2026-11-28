@@ -368,7 +368,7 @@ void UZSWeaponComponent::RequestMelee()
 			bMeleeAnimated = true;
 		}
 	}
-	static USoundBase* Whoosh = LoadObject<USoundBase>(nullptr, TEXT("/Game/InfimaGames/TacticalFPSAnimations/Common/Audio/Melee/A_TFA_Melee_Whoosh_Cue.A_TFA_Melee_Whoosh_Cue"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	USoundBase* Whoosh = LoadObject<USoundBase>(nullptr, TEXT("/Game/InfimaGames/TacticalFPSAnimations/Common/Audio/Melee/A_TFA_Melee_Whoosh_Cue.A_TFA_Melee_Whoosh_Cue"), nullptr, LOAD_NoWarn | LOAD_Quiet);
 	if (Whoosh)
 	{
 		UGameplayStatics::PlaySound2D(this, Whoosh, 0.8f);
@@ -405,7 +405,7 @@ void UZSWeaponComponent::DoMeleeHit()
 		}
 	}
 	UZSCameraComponent* Cam = Char->GetFirstPersonCamera();
-	static USoundBase* Impact = LoadObject<USoundBase>(nullptr, TEXT("/Game/InfimaGames/TacticalFPSAnimations/Common/Audio/Melee/A_TFA_Melee_Impact_Cue.A_TFA_Melee_Impact_Cue"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	USoundBase* Impact = LoadObject<USoundBase>(nullptr, TEXT("/Game/InfimaGames/TacticalFPSAnimations/Common/Audio/Melee/A_TFA_Melee_Impact_Cue.A_TFA_Melee_Impact_Cue"), nullptr, LOAD_NoWarn | LOAD_Quiet);
 	if (Best)
 	{
 		AActor* Target = Best->GetActor();

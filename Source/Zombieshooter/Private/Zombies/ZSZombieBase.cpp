@@ -848,7 +848,10 @@ void AZSZombieBase::UpdatePhysicalHit(float DeltaSeconds)
 	{
 		// Rotate the mesh about the capsule centre (roughly the hips), not its feet.
 		const FQuat J = Jolt.Quaternion();
-		MeshComp->SetRelativeLocationAndRotation(J.RotateVector(FVector(0.f, 0.f, -90.f)), J * FRotator(0.f, -90.f, 0.f).Quaternion());
+		// Feet at the bottom of the capsule, whatever its height (crawlers shrink it: a fixed -90 sank them into the floor,
+		// where bullets hit the floor instead - unkillable crawlers).
+		const float Half = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
+		MeshComp->SetRelativeLocationAndRotation(J.RotateVector(FVector(0.f, 0.f, -Half)), J * FRotator(0.f, -90.f, 0.f).Quaternion());
 	}
 	if (HitReactAlpha > 0.f)
 	{
